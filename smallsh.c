@@ -280,7 +280,7 @@ int runCdCommand(struct commandElements* curCommand, int i)
             printf("Dir after cd: %s\n", cwd);
         }
     }
-    
+
     return i;
 }
 
@@ -293,6 +293,8 @@ bool runCommands(struct commandElements* curCommand)
     int i, j;
     int numBuiltIns = 3;
     int builtInNum = -1;
+    int lastFgStatus = 0; /* REVISIT THIS */ // Exit status or terminating
+    int lastFgSignal = 2; /* REVISIT THIS */ // signal of the last foreground process ran by shell
     char* builtInCommands[numBuiltIns];
     char* pathDir = calloc(256, sizeof(char));
     // char* changeDirectory[MAX_COMMAND_LINE_LENGTH];
@@ -313,7 +315,7 @@ bool runCommands(struct commandElements* curCommand)
                 break;
             }
         }
-
+        
         switch(builtInNum)
         {
             case 1: // exit command
@@ -331,6 +333,12 @@ bool runCommands(struct commandElements* curCommand)
                 // Prints out either the exit status or the
                 // terminating signal of the last foreground process
                 // ran by the shell
+                // If exit status
+                printf("exit value %d\n", lastFgStatus);
+                fflush(stdout);
+                // or if terminating signal
+                printf("terminated by signal %d\n", lastFgSignal);
+                fflush(stdout);
                 break;
             default: // none built in
                 printf("Default\n");
