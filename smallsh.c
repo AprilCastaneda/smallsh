@@ -129,6 +129,7 @@ struct commandElements* getCommandLine()
 
     // Print shell prompt character
     printf(": ");
+    fflush(stdout);
 
     // Get command line until a newline is read
     fgets(commandLine, MAX_COMMAND_LINE_LENGTH, stdin);
@@ -145,47 +146,37 @@ void printCommandElements(struct commandElements* curCommand)
     int i;
 
     printf("%d arguments\n", curCommand->numArguments);
+    fflush(stdout);
 
     if(curCommand->fg == false)
     {
         printf("Background Process.\n");
+        fflush(stdout);
     }
     else
     {
         printf("Foreground Process.\n");
+        fflush(stdout);
     }
 
     if(curCommand->inputRedirect == true)
     {
         printf("Input Redirect file: %s\n", curCommand->inputFile);
+        fflush(stdout);
     }
 
     if(curCommand->outputRedirect == true)
     {
         printf("Output Redirect file: %s\n", curCommand->outputFile);
+        fflush(stdout);
     }
     
     for(i = 0; i < curCommand->numArguments; i++)
     {
         printf("Argument %d: %s\n", i+1, curCommand->commands[i]);
+        fflush(stdout);
     }
 }
-
-/*
-*
-*/
-// bool checkExit(char* command)
-// {
-//     bool isExiting = false;
-
-//     // Check if argument wants to exit
-//     if(strcmp(command, "exit") == 0)
-//     {
-//         isExiting = true;
-//     }
-
-//     return isExiting;
-// }
 
 /*
 *   Does not have to support i/o redirections, does not have to set any
@@ -202,6 +193,7 @@ void runExitCommand()
     int arraySize = pidIndex;
 
     printf("Is at run Exit command\n");
+    fflush(stdout);
 
     // Kill any other processes or jobs that shell has started
     // Idea: Go through list of processIDs from end, wait until each 
@@ -209,6 +201,7 @@ void runExitCommand()
     for(i = 0; i < arraySize; i++)
     {
         printf("Kill processID: %d\n", processIDs[i]);
+        fflush(stdout);
         kill(processIDs[i], SIGTERM);
     }
 
@@ -222,6 +215,7 @@ void runExitCommand()
 int runCdCommand(struct commandElements* curCommand, int i)
 {
     printf("at cd\n");
+    fflush(stdout);
     fflush(stdout);
     char cwd[256];
     char path[256];
@@ -262,6 +256,7 @@ int runCdCommand(struct commandElements* curCommand, int i)
             chdir(path);
             getcwd(cwd, sizeof(cwd));
             printf("Dir after cd: %s\n", cwd);
+            fflush(stdout);
         }
         // If relative, first get cwd, add '/',
         // concatenate relative path, then chdir to path
@@ -278,6 +273,7 @@ int runCdCommand(struct commandElements* curCommand, int i)
             chdir(path);
             getcwd(cwd, sizeof(cwd));
             printf("Dir after cd: %s\n", cwd);
+            fflush(stdout);
         }
     }
 
@@ -315,7 +311,7 @@ bool runCommands(struct commandElements* curCommand)
                 break;
             }
         }
-        
+
         switch(builtInNum)
         {
             case 1: // exit command
@@ -342,6 +338,7 @@ bool runCommands(struct commandElements* curCommand)
                 break;
             default: // none built in
                 printf("Default\n");
+                fflush(stdout);
         }
     }
     return isExiting;
