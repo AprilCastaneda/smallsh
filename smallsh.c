@@ -219,6 +219,74 @@ void runExitCommand()
 /*
 *
 */
+int runCdCommand(struct commandElements* curCommand, int i)
+{
+    printf("at cd\n");
+    fflush(stdout);
+    char cwd[256];
+    char path[256];
+
+    if(i == curCommand->numArguments - 1)
+    {
+        // Then change to HOME directory
+        getcwd(cwd, sizeof(cwd));
+        printf("Dir before cd: %s\n", cwd);
+        fflush(stdout);
+        chdir(getenv("HOME"));
+        getcwd(cwd, sizeof(cwd));
+        printf("Dir after cd: %s\n", cwd);
+        fflush(stdout);
+    }
+    // If there is an argument, then change to this
+    // directory. Command should support both absolute
+    // and relative paths.
+    else
+    {
+        // Get path, which is argument after cd
+        i++;
+        strcpy(path, curCommand->commands[i]);
+        printf("Path after cd: %s\n", path);
+        fflush(stdout);
+        // Determine if path is absolute e.g. /bin/myfile
+        // or relative e.g. mydir/myfile
+        // If absolute, first char is '/', then chdir
+        // with path
+        char firstChar = path[0];
+        if(firstChar == '/')
+        {
+            printf("path is absolute\n");
+            fflush(stdout);
+            getcwd(cwd, sizeof(cwd));
+            printf("Dir before cd: %s\n", cwd);
+            fflush(stdout);
+            chdir(path);
+            getcwd(cwd, sizeof(cwd));
+            printf("Dir after cd: %s\n", cwd);
+        }
+        // If relative, first get cwd, add '/',
+        // concatenate relative path, then chdir to path
+        else
+        {
+            printf("path is relative\n");
+            fflush(stdout);
+            getcwd(cwd, sizeof(cwd));
+            printf("Dir before cd: %s\n", cwd);
+            fflush(stdout);
+            strcat(cwd, "/");
+            strcat(cwd, path);
+            strcpy(path, cwd); // Did this as path is a better var name
+            chdir(path);
+            getcwd(cwd, sizeof(cwd));
+            printf("Dir after cd: %s\n", cwd);
+        }
+    }
+    
+    return i;
+}
+
+/*
+*
+*/
 bool runCommands(struct commandElements* curCommand)
 {
     bool isExiting = false;
@@ -257,64 +325,7 @@ bool runCommands(struct commandElements* curCommand)
                 break;
             case 2: // cd command
                 // If no argument after cd
-                printf("at cd\n");
-                fflush(stdout);
-                char cwd[256];
-                char path[256];
-                if(i == curCommand->numArguments - 1)
-                {
-                    // Then change to HOME directory
-                    getcwd(cwd, sizeof(cwd));
-                    printf("Dir before cd: %s\n", cwd);
-                    fflush(stdout);
-                    chdir(getenv("HOME"));
-                    getcwd(cwd, sizeof(cwd));
-                    printf("Dir after cd: %s\n", cwd);
-                    fflush(stdout);
-                }
-                // If there is an argument, then change to this
-                // directory. Command should support both absolute
-                // and relative paths
-                else
-                {
-                    // Get path, which is argument after cd
-                    i++;
-                    strcpy(path, curCommand->commands[i]);
-                    printf("Path after cd: %s\n", path);
-                    fflush(stdout);
-                    // Determine if path is absolute e.g. /bin/myfile
-                    // or relative e.g. mydir/myfile
-                    // If absolute, first char is '/', then chdir
-                    // with path
-                    char firstChar = path[0];
-                    if(firstChar == '/')
-                    {
-                        printf("path is absolute\n");
-                        fflush(stdout);
-                        getcwd(cwd, sizeof(cwd));
-                        printf("Dir before cd: %s\n", cwd);
-                        fflush(stdout);
-                        chdir(path);
-                        getcwd(cwd, sizeof(cwd));
-                        printf("Dir after cd: %s\n", cwd);
-                    }
-                    // If relative, first get cwd, add '/',
-                    // concatenate relative path, then chdir to path
-                    else
-                    {
-                        printf("path is relative\n");
-                        fflush(stdout);
-                        getcwd(cwd, sizeof(cwd));
-                        printf("Dir before cd: %s\n", cwd);
-                        fflush(stdout);
-                        strcat(cwd, "/");
-                        strcat(cwd, path);
-                        strcpy(path, cwd); // Did this as path is a better var name
-                        chdir(path);
-                        getcwd(cwd, sizeof(cwd));
-                        printf("Dir after cd: %s\n", cwd);
-                    }
-                }
+                i = runCdCommand(curCommand, i); // Change index if needed
                 break;
             case 3: // status command
                 // Prints out either the exit status or the
