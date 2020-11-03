@@ -24,20 +24,6 @@ struct commandElements
 };
 
 /*
-*   Does not have to support i/o redirections, does not have to set any
-*   exit status, if used as bg process with & - ignore option and run
-*   command in foreground anyway, i.e. don't display an error.
-*   When this command is run, shell kills any other processes or jobs
-*   that shell has started before it terminates itself. 
-*   Built in commands do not count as foreground processes for the
-*   status command, i.e., status should ignore this command.
-*/
-bool processExit()
-{
-    return true;
-}
-
-/*
 *   Program that sets in struct if command will run in foreground or
 *   background. This is determined by the '&' character, which, if it
 *   appears at the end of the commandLine, then the command will run
@@ -185,13 +171,15 @@ void printCommandElements(struct commandElements* curCommand)
 */
 bool checkExit(char* command)
 {
+    bool isExiting = false;
+
     // Check if argument wants to exit
     if(strcmp(command, "exit") == 0)
     {
-        return processExit();
+        isExiting = true;
     }
 
-    return false;
+    return isExiting;
 }
 
 /*
@@ -199,23 +187,36 @@ bool checkExit(char* command)
 */
 bool runCommands(struct commandElements* curCommand)
 {
-    bool exitShell = false;
-
-    // See if shell is exiting
+    bool isExiting = false;
     int i;
 
+    // Go through and process all commands
     for(i = 0; i < curCommand->numArguments; i++)
     {
-        // Check if any argument wants to exit
-        exitShell = checkExit(curCommand->commands[i]);
+        // Check if command wants to exit
+        isExiting = checkExit(curCommand->commands[i]);
 
-        if(exitShell)
+        if(isExiting)
         {
-            return exitShell;
+            return isExiting;
         }
     }
 
-    return exitShell;
+    return isExiting;
+}
+
+/*
+*   Does not have to support i/o redirections, does not have to set any
+*   exit status, if used as bg process with & - ignore option and run
+*   command in foreground anyway, i.e. don't display an error.
+*   When this command is run, shell kills any other processes or jobs
+*   that shell has started before it terminates itself. 
+*   Built in commands do not count as foreground processes for the
+*   status command, i.e., status should ignore this command.
+*/
+void runExitCommand()
+{
+    printf("Is at run Exit command\n");
 }
 
 /*
@@ -232,7 +233,7 @@ bool runCommands(struct commandElements* curCommand)
 int main()
 {
     struct commandElements* curCommand;
-    bool exitShell = false;
+    bool isExiting = false;
 
     // Show shell prompt to user
     printf("\n");
@@ -240,11 +241,13 @@ int main()
     {
         curCommand = getCommandLine();
 
-        printCommandElements(curCommand);
+        printCommandElements(curCommand); // For testing only
 
-        exitShell = runCommands(curCommand);
+        isExiting = runCommands(curCommand);
     }
-    while(!exitShell);
+    while(!isExiting);
+
+    runExitCommand();
 
     return EXIT_SUCCESS;
 }
