@@ -12,24 +12,51 @@ struct commandElements
     char* commands[MAX_COMMAND_LINE_ARGUMENTS];
     char* inputFile;
     char* outputFile;
+    int numArguments;
 };
 
 /*
 *   Parses command line into elements in commandElements struct.
 */
-void parseCommandLine(char* commandLine)
+struct commandElements* parseCommandLine(char* commandLine)
 {
+    struct commandElements *curCommand = malloc(sizeof(struct commandElements));
+
     // Get index of newline char and overwrite it with 0
     commandLine[strcspn(commandLine, "\n")] = 0;
 
     printf("You typed in: %s\n", commandLine);
+
+    // For use with strtok_r
+    char *saveptr;
+
+    // The first token is the title
+    char *token = strtok_r(commandLine, " ", &saveptr);
+    int index = 0;
+    int numArguments = 0;
+
+    // Go through command line until all arguments parsed
+    while(token != NULL)
+    {
+        printf("This word: %s\n", token);
+        curCommand->commands[index] = calloc(strlen(token) + 1, sizeof(char));
+        strcpy(curCommand->commands[index], token);
+        token = strtok_r(NULL, " ", &saveptr);
+        index++;
+    }
+
+    numArguments = index;
+
+    curCommand->numArguments = numArguments;
+
+    return curCommand;
 }
 
 /*
 *   Get command line elements and parse elements into commandElements
 *   struct.
 */
-void getCommandLine()
+struct commandElements* getCommandLine()
 {
     char* commandLine = calloc(MAX_COMMAND_LINE_LENGTH, sizeof(char));
 
@@ -40,8 +67,24 @@ void getCommandLine()
     fgets(commandLine, MAX_COMMAND_LINE_LENGTH, stdin);
 
     // Parse command line into struct
-    parseCommandLine(commandLine);
+    return parseCommandLine(commandLine);
 } 
+
+/*
+*   Print data for the commandElements struct. For testing purposes.
+*/
+void printCommandElements(struct commandElements* curCommand)
+{
+    int i;
+
+    printf("%d arguments\n", curCommand->numArguments);
+    
+    for(i = 0; i < curCommand->numArguments; i++)
+    {
+        printf("Argument %d: %s\n", i+1, curCommand->commands[i]);
+    }
+}
+
 
 /*
 *   C shell that implements a subset of features such as providing a
@@ -56,13 +99,16 @@ void getCommandLine()
 */
 int main()
 {
+    struct commandElements *curCommand;
     bool exitShell = false;
 
     // Show shell prompt to user
     printf("\n");
     // do
     // {
-        getCommandLine();
+    curCommand = getCommandLine();
+
+    printCommandElements(curCommand);
 
     //     exitShell = parseCommandLine(commandLine);
     // }
