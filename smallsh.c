@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#define MAX_COMMAND_LINE_LENGTH 2048
+#define MAX_COMMAND_LINE_LENGTH 2049 // 2048 characters plus null at the end
 #define MAX_COMMAND_LINE_ARGUMENTS 512
 
 /* struct for command line elements */
@@ -13,6 +13,17 @@ struct commandElements
     char* inputFile;
     char* outputFile;
 };
+
+/*
+*   Parses command line into elements in commandElements struct.
+*/
+void parseCommandLine(char* commandLine)
+{
+    // Get index of newline char and overwrite it with 0
+    commandLine[strcspn(commandLine, "\n")] = 0;
+
+    printf("You typed in: %s\n", commandLine);
+}
 
 /*
 *   Get command line elements and parse elements into commandElements
@@ -28,7 +39,8 @@ void getCommandLine()
     // Get command line until a newline is read
     fgets(commandLine, MAX_COMMAND_LINE_LENGTH, stdin);
 
-    printf("You typed in: %s\n", commandLine);
+    // Parse command line into struct
+    parseCommandLine(commandLine);
 } 
 
 /*
