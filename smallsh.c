@@ -197,6 +197,8 @@ bool runCommands(struct commandElements* curCommand)
     int numBuiltIns = 3;
     int builtInNum = -1;
     char* builtInCommands[numBuiltIns];
+    char* pathDir = calloc(256, sizeof(char));
+    // char* changeDirectory[MAX_COMMAND_LINE_LENGTH];
     
     builtInCommands[0] = "exit";
     builtInCommands[1] = "cd";
@@ -224,6 +226,50 @@ bool runCommands(struct commandElements* curCommand)
                 return isExiting;   // return immediately to exit
                 break;
             case 2: // cd command
+                // If no argument after cd
+                printf("at cd\n");
+                fflush(stdout);
+                if(i == curCommand->numArguments - 1)
+                {
+                    // Then change to HOME directory
+                    char cwd[256];
+                    getcwd(cwd, sizeof(cwd));
+                    printf("Dir before cd: %s\n", cwd);
+                    fflush(stdout);
+                    chdir(getenv("HOME"));
+                    getcwd(cwd, sizeof(cwd));
+                    printf("Dir after cd: %s\n", cwd);
+                    fflush(stdout);
+                }
+                // If there is an argument, then change to this
+                // directory. Command should support both absolute
+                // and relative paths
+                else
+                {
+                    // Get path, which is argument after cd
+                    char path[256];
+                    i++;
+                    strcpy(path, curCommand->commands[i]);
+                    printf("Path after cd: %s\n", path);
+                    fflush(stdout);
+                    // Determine if path is absolute e.g. /bin/myfile
+                    // or relative e.g. mydir/myfile
+                    // If absolute, first char is '/'
+                    char firstChar = path[0];
+                    if(firstChar == '/')
+                    {
+                        printf("path is absolute\n");
+                        fflush(stdout);
+                    }
+                    else
+                    {
+                        printf("path is relative\n");
+                        fflush(stdout);
+                    }
+
+                    // Change directory to path
+                }
+
                 break;
             case 3: // status command
                 break;
