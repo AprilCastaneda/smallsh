@@ -174,17 +174,46 @@ void printCommandElements(struct commandElements* curCommand)
 /*
 *
 */
-bool checkExit(char* command)
-{
-    bool isExiting = false;
+// bool checkExit(char* command)
+// {
+//     bool isExiting = false;
 
-    // Check if argument wants to exit
-    if(strcmp(command, "exit") == 0)
+//     // Check if argument wants to exit
+//     if(strcmp(command, "exit") == 0)
+//     {
+//         isExiting = true;
+//     }
+
+//     return isExiting;
+// }
+
+/*
+*   Does not have to support i/o redirections, does not have to set any
+*   exit status, if used as bg process with & - ignore option and run
+*   command in foreground anyway, i.e. don't display an error.
+*   When this command is run, shell kills any other processes or jobs
+*   that shell has started before it terminates itself. 
+*   Built in commands do not count as foreground processes for the
+*   status command, i.e., status should ignore this command.
+*/
+void runExitCommand()
+{
+    int i;
+    int arraySize = pidIndex;
+
+    printf("Is at run Exit command\n");
+
+    // Kill any other processes or jobs that shell has started
+    // Idea: Go through list of processIDs from end, wait until each 
+    // process is killed, then kill own process.
+    for(i = 0; i < arraySize; i++)
     {
-        isExiting = true;
+        printf("Kill processID: %d\n", processIDs[i]);
+        kill(processIDs[i], SIGTERM);
     }
 
-    return isExiting;
+    // Status should ignore this command
+    // Shell will be killed in main() by return EXIT_SUCCESS;
 }
 
 /*
@@ -222,6 +251,7 @@ bool runCommands(struct commandElements* curCommand)
             case 1: // exit command
                 curCommand->fg = true;
                 curCommand->bg = false;
+                runExitCommand();
                 isExiting = true;
                 return isExiting;   // return immediately to exit
                 break;
@@ -279,52 +309,23 @@ bool runCommands(struct commandElements* curCommand)
                         fflush(stdout);
                         strcat(cwd, "/");
                         strcat(cwd, path);
-                        // printf("Path(cwd) after concat: %s\n", cwd);
                         strcpy(path, cwd); // Did this as path is a better var name
                         chdir(path);
                         getcwd(cwd, sizeof(cwd));
                         printf("Dir after cd: %s\n", cwd);
                     }
-
-                    // Change directory to path
                 }
-
                 break;
             case 3: // status command
+                // Prints out either the exit status or the
+                // terminating signal of the last foreground process
+                // ran by the shell
                 break;
             default: // none built in
                 printf("Default\n");
         }
     }
     return isExiting;
-}
-
-/*
-*   Does not have to support i/o redirections, does not have to set any
-*   exit status, if used as bg process with & - ignore option and run
-*   command in foreground anyway, i.e. don't display an error.
-*   When this command is run, shell kills any other processes or jobs
-*   that shell has started before it terminates itself. 
-*   Built in commands do not count as foreground processes for the
-*   status command, i.e., status should ignore this command.
-*/
-void runExitCommand()
-{
-    int i;
-    int arraySize = pidIndex;
-
-    printf("Is at run Exit command\n");
-
-    // Kill any other processes or jobs that shell has started
-    // Idea: Go through list of processIDs from end, wait until each 
-    // process is killed, then kill own process.
-    for(i = 0; i < arraySize; i++)
-    {
-        printf("Kill processID: %d\n", processIDs[i]);
-        kill(processIDs[i], SIGTERM);
-    }
-
-    // Status should ignore this command
 }
 
 /*
@@ -355,9 +356,6 @@ int main()
         isExiting = runCommands(curCommand);
     }
     while(!isExiting);
-
-    // Kill all background processes
-    runExitCommand();
 
     // Kill shell
     return EXIT_SUCCESS;
