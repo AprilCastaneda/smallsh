@@ -229,10 +229,11 @@ bool runCommands(struct commandElements* curCommand)
                 // If no argument after cd
                 printf("at cd\n");
                 fflush(stdout);
+                char cwd[256];
+                char path[256];
                 if(i == curCommand->numArguments - 1)
                 {
                     // Then change to HOME directory
-                    char cwd[256];
                     getcwd(cwd, sizeof(cwd));
                     printf("Dir before cd: %s\n", cwd);
                     fflush(stdout);
@@ -247,19 +248,25 @@ bool runCommands(struct commandElements* curCommand)
                 else
                 {
                     // Get path, which is argument after cd
-                    char path[256];
                     i++;
                     strcpy(path, curCommand->commands[i]);
                     printf("Path after cd: %s\n", path);
                     fflush(stdout);
                     // Determine if path is absolute e.g. /bin/myfile
                     // or relative e.g. mydir/myfile
-                    // If absolute, first char is '/'
+                    // If absolute, first char is '/', then chdir
+                    // with path
                     char firstChar = path[0];
                     if(firstChar == '/')
                     {
                         printf("path is absolute\n");
                         fflush(stdout);
+                        getcwd(cwd, sizeof(cwd));
+                        printf("Dir before cd: %s\n", cwd);
+                        fflush(stdout);
+                        chdir(path);
+                        getcwd(cwd, sizeof(cwd));
+                        printf("Dir after cd: %s\n", cwd);
                     }
                     else
                     {
