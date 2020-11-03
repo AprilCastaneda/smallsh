@@ -12,6 +12,8 @@ struct commandElements
     char* commands[MAX_COMMAND_LINE_ARGUMENTS];
     char* inputFile;
     char* outputFile;
+    bool fg;    // false if & found at end of command line
+    bool bg;    // true if & found at end of command line
     int numArguments;
 };
 
@@ -45,8 +47,19 @@ struct commandElements* parseCommandLine(char* commandLine)
         index++;
     }
 
-    numArguments = index;
+    // If & at end of command line, command is to be executed in bg
+    if(strcmp(curCommand->commands[index-1], "&") == 0)
+    {
+        curCommand->fg = false;
+        curCommand->bg = true;
+    }
+    else
+    {
+        curCommand->fg = true;
+        curCommand->bg = false;
+    }
 
+    numArguments = index;
     curCommand->numArguments = numArguments;
 
     return curCommand;
@@ -78,11 +91,48 @@ void printCommandElements(struct commandElements* curCommand)
     int i;
 
     printf("%d arguments\n", curCommand->numArguments);
+
+    if(curCommand->fg == false)
+    {
+        printf("Background Process.\n");
+    }
+    else
+    {
+        printf("Foreground Process.\n");
+    }
     
     for(i = 0; i < curCommand->numArguments; i++)
     {
         printf("Argument %d: %s\n", i+1, curCommand->commands[i]);
     }
+}
+
+/*
+*   Does not have to support i/o redirections, does not have to set any
+*   exit status, if used as bg process with & - ignore option and run
+*   command in foreground anyway, i.e. don't display an error.
+*   When this command is run, shell kills any other processes or jobs
+*   that shell has started before it terminates itself. 
+*   Built in commands do not count as foreground processes for the
+*   status command, i.e., status should ignore this command.
+*/
+bool runExit()
+{
+    return true;
+}
+
+/*
+*
+*/
+bool checkExit(char* command)
+{
+    // Check if argument wants to exit
+    if(strcmp(command, "exit") == 0)
+    {
+        return runExit();
+    }
+
+    return false;
 }
 
 /*
@@ -97,11 +147,13 @@ bool runCommands(struct commandElements* curCommand)
 
     for(i = 0; i < curCommand->numArguments; i++)
     {
-        if(strcmp(curCommand->commands[i], "exit") == 0)
+        // Check if any argument wants to exit
+        exitShell = checkExit(curCommand->commands[i]);
+
+        if(exitShell)
         {
-            exitShell = true;
             return exitShell;
-        }        
+        }
     }
 
     return exitShell;
