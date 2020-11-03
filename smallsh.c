@@ -268,10 +268,22 @@ bool runCommands(struct commandElements* curCommand)
                         getcwd(cwd, sizeof(cwd));
                         printf("Dir after cd: %s\n", cwd);
                     }
+                    // If relative, first get cwd, add '/',
+                    // concatenate relative path, then chdir to path
                     else
                     {
                         printf("path is relative\n");
                         fflush(stdout);
+                        getcwd(cwd, sizeof(cwd));
+                        printf("Dir before cd: %s\n", cwd);
+                        fflush(stdout);
+                        strcat(cwd, "/");
+                        strcat(cwd, path);
+                        // printf("Path(cwd) after concat: %s\n", cwd);
+                        strcpy(path, cwd); // Did this as path is a better var name
+                        chdir(path);
+                        getcwd(cwd, sizeof(cwd));
+                        printf("Dir after cd: %s\n", cwd);
                     }
 
                     // Change directory to path
