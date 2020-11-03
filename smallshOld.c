@@ -24,6 +24,27 @@ struct commandElements
 };
 
 /*
+*   Check if token is a special symbol <, >, or &.
+*/
+bool checkSpecialSymbol(char* token)
+{
+    int i;
+    bool isSpecialSymbol = false;
+
+    // Check if special symbol
+    for(i = 0; i < NUM_SPECIAL_SYMBOLS; i++)
+    {
+        if(strcmp(token, specialSymbols[i]) == 0)
+        {
+            isSpecialSymbol = true;
+            return isSpecialSymbol;
+        }
+    }
+
+    return isSpecialSymbol;
+}
+
+/*
 *   Does not have to support i/o redirections, does not have to set any
 *   exit status, if used as bg process with & - ignore option and run
 *   command in foreground anyway, i.e. don't display an error.
@@ -38,29 +59,90 @@ bool processExit()
 }
 
 /*
-*   Program that sets in struct if command will run in foreground or
-*   background. This is determined by the '&' character, which, if it
-*   appears at the end of the commandLine, then the command will run
-*   in the background. Otherwise, command will run in the foreground.
-*   Struct bool values for fg and bg are set accordingly.
+*
 */
-void setCommandPosition(char* commandLine, struct commandElements* curCommand)
+char* processBG(char* token, struct commandElements* curCommand)
 {
-    if(commandLine[strlen(commandLine) - 1] == '&')
+    char* tempptr;
+    char* temptoken = strtok_r(token, " ", &tempptr);
+
+    if(temptoken == NULL)
     {
-        // printf("& is at eol\n");
         curCommand->fg = false;
         curCommand->bg = true;
-
-        // Overwrite '&' as it has already been used to determine
-        // command position
-        commandLine[strlen(commandLine) - 1] = 0;
+        curCommand->endOfLine = true;
     }
-    else
+
+    return temptoken;
+}
+
+/*
+*
+*/
+char* processOutputRedirect(char* token, char* saveptr, struct commandElements* curCommand)
+{
+    char* temptoken = strtok_r(token, " ", &saveptr);
+
+    curCommand->outputFile = calloc(strlen(temptoken) + 1, sizeof(char));
+    strcpy(curCommand->outputFile, temptoken);
+    curCommand->outputRedirect = true;
+
+    return temptoken;
+}
+
+/*
+*
+*/
+char* processInputRedirect(char* token, char* saveptr, struct commandElements* curCommand)
+{
+    char* temptoken = strtok_r(token, " ", &saveptr);
+
+    curCommand->inputFile = calloc(strlen(temptoken) + 1, sizeof(char));
+    strcpy(curCommand->inputFile, temptoken);
+    curCommand->inputRedirect = true;
+
+    return temptoken;
+}
+
+/*
+*
+*/
+void processSpecialToken(char specialChar, char* token, char* saveptr, struct commandElements* curCommand)
+{
+    bool isSpecialSymbol = false;
+    bool endOfLine = false;
+    char firstChar;
+    char *temptoken;
+
+    switch(specialChar)
     {
-        // printf("& is at midline\n");
-        curCommand->fg = true;
-        curCommand->bg = false;
+        case '<':
+            temptoken = processInputRedirect(token, saveptr, curCommand);
+            break;
+        case '>': 
+            temptoken = processOutputRedirect(token, saveptr, curCommand);
+            break;
+        case '&': 
+            temptoken = processBG(token, curCommand);
+            break;
+        default:
+            printf("Error. Not a special char.\n");
+    }
+
+    if(!curCommand->endOfLine)
+    {
+        temptoken = strtok_r(NULL, " ", &saveptr);
+
+        if(temptoken != NULL)
+        {
+            isSpecialSymbol = checkSpecialSymbol(temptoken);
+
+            if(isSpecialSymbol)
+            {
+                firstChar = token[0];
+                processSpecialToken(firstChar, temptoken, saveptr, curCommand);
+            }
+        }
     }
 }
 
@@ -74,51 +156,70 @@ struct commandElements* parseCommandLine(char* commandLine)
     // Get index of newline char and overwrite it with 0
     commandLine[strcspn(commandLine, "\n")] = 0;
 
-    // printf("You typed in: %s\n", commandLine);
+    printf("You typed in: %s\n", commandLine);
 
-    // Set if command will run in foreground or background
-    setCommandPosition(commandLine, curCommand);
-
-    // Initialize elements of curCommand struct
+    // Initialize some elements of curCommand
     curCommand->inputRedirect = false;
     curCommand->outputRedirect = false;
+    curCommand->fg = true;
+    curCommand->bg = false;
+    curCommand->endOfLine = false;
 
     // For use with strtok_r
     char *saveptr;
 
     // The first token is the title
-    char* token = strtok_r(commandLine, " ", &saveptr);
+    char *token = strtok_r(commandLine, " ", &saveptr);
+    // char *temptoken;
+    char specialChar;
     int index = 0;
     int numArguments = 0;
+    bool isSpecialSymbol = false;
+    // bool endOfLine = false;
+    bool continueParse = true;
 
     // Go through command line until all arguments parsed
     // If special symbols <, >, & found, process accordingly
-    while(token != NULL)
+    while(token != NULL && continueParse)
     {
-        // printf("This word: %s\n", token);
+        printf("This word: %s\n", token);
 
         // Check if token is a special symbol
-        switch(token[0])
+        isSpecialSymbol = checkSpecialSymbol(token);
+
+        // If special symbol found, process differently
+        if(isSpecialSymbol)
         {
-            case '<':   // If input redirect, then set inputFile
-                token = strtok_r(NULL, " ", &saveptr);
-                curCommand->inputFile = calloc(strlen(token) + 1, sizeof(char));
-                strcpy(curCommand->inputFile, token);
-                curCommand->inputRedirect = true;
-                token = strtok_r(NULL, " ", &saveptr);
-                break;
-            case '>':   // If output redirect, then set outputFile
-                token = strtok_r(NULL, " ", &saveptr);
-                curCommand->outputFile = calloc(strlen(token) + 1, sizeof(char));
-                strcpy(curCommand->outputFile, token);
-                curCommand->outputRedirect = true;
-                token = strtok_r(NULL, " ", &saveptr);
-                break;
-            default:    // Otherwise, store as command arguments
-                curCommand->commands[index] = calloc(strlen(token) + 1, sizeof(char));
-                strcpy(curCommand->commands[index], token);
-                token = strtok_r(NULL, " ", &saveptr);
-                index++;
+            specialChar = token[0];
+
+            if(specialChar == '&')
+            {
+                token = processBG(token, curCommand);
+
+                if(curCommand->endOfLine)
+                {
+                    continueParse = false;
+                }
+                else
+                {
+                    curCommand->commands[index] = calloc(2, sizeof(char)); // specialChar + '/0'
+                    strcpy(curCommand->commands[index], token);
+                    index++;
+                    token = strtok_r(NULL, " ", &saveptr); 
+                }
+            }
+            else
+            {
+                processSpecialToken(specialChar, token, saveptr, curCommand);
+                continueParse = false;
+            }
+        }
+        else
+        {
+            curCommand->commands[index] = calloc(strlen(token) + 1, sizeof(char));
+            strcpy(curCommand->commands[index], token);
+            token = strtok_r(NULL, " ", &saveptr);
+            index++;
         }
     }
 
