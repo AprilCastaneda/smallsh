@@ -2,12 +2,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <sys/types.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define MAX_COMMAND_LINE_LENGTH 2049 // 2048 characters plus null at the end
 #define MAX_COMMAND_LINE_ARGUMENTS 512
-#define NUM_SPECIAL_SYMBOLS 3
 
-const char* specialSymbols[NUM_SPECIAL_SYMBOLS] = {"<", ">", "&"};
+int processIDs[MAX_COMMAND_LINE_ARGUMENTS];
+int pidIndex = 0;
 
 /* struct for command line elements */
 struct commandElements
@@ -19,8 +23,9 @@ struct commandElements
     bool outputRedirect;
     bool fg;    // false if & found at end of command line
     bool bg;    // true if & found at end of command line
-    bool endOfLine;
+    int pid;
     int numArguments;
+    struct commandElements* next;
 };
 
 /*
@@ -188,20 +193,44 @@ bool checkExit(char* command)
 bool runCommands(struct commandElements* curCommand)
 {
     bool isExiting = false;
-    int i;
+    int i, j;
+    int numBuiltIns = 3;
+    int builtInNum = -1;
+    char* builtInCommands[numBuiltIns];
+    
+    builtInCommands[0] = "exit";
+    builtInCommands[1] = "cd";
+    builtInCommands[2] = "status";
 
     // Go through and process all commands
     for(i = 0; i < curCommand->numArguments; i++)
     {
-        // Check if command wants to exit
-        isExiting = checkExit(curCommand->commands[i]);
-
-        if(isExiting)
+        // Check for built in commands 'exit', 'cd', and 'status'
+        for(j = 0; j < numBuiltIns; j++)
         {
-            return isExiting;
+            if(strcmp(curCommand->commands[i], builtInCommands[j]) == 0)
+            {
+                builtInNum = j + 1;
+                break;
+            }
+        }
+
+        switch(builtInNum)
+        {
+            case 1: // exit command
+                curCommand->fg = true;
+                curCommand->bg = false;
+                isExiting = true;
+                return isExiting;   // return immediately to exit
+                break;
+            case 2: // cd command
+                break;
+            case 3: // status command
+                break;
+            default: // none built in
+                printf("Default\n");
         }
     }
-
     return isExiting;
 }
 
@@ -216,7 +245,21 @@ bool runCommands(struct commandElements* curCommand)
 */
 void runExitCommand()
 {
+    int i;
+    int arraySize = pidIndex;
+
     printf("Is at run Exit command\n");
+
+    // Kill any other processes or jobs that shell has started
+    // Idea: Go through list of processIDs from end, wait until each 
+    // process is killed, then kill own process.
+    for(i = 0; i < arraySize; i++)
+    {
+        printf("Kill processID: %d\n", processIDs[i]);
+        kill(processIDs[i], SIGTERM);
+    }
+
+    // Status should ignore this command
 }
 
 /*
@@ -235,8 +278,9 @@ int main()
     struct commandElements* curCommand;
     bool isExiting = false;
 
-    // Show shell prompt to user
+    // Create linked list of commands
     printf("\n");
+    fflush(stdout); /* FLUSH AFTER EVERY PRINT! */
     do
     {
         curCommand = getCommandLine();
@@ -247,7 +291,9 @@ int main()
     }
     while(!isExiting);
 
+    // Kill all background processes
     runExitCommand();
 
+    // Kill shell
     return EXIT_SUCCESS;
 }
