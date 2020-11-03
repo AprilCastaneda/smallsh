@@ -85,6 +85,27 @@ void printCommandElements(struct commandElements* curCommand)
     }
 }
 
+/*
+*
+*/
+bool runCommands(struct commandElements* curCommand)
+{
+    bool exitShell = false;
+
+    // See if shell is exiting
+    int i;
+
+    for(i = 0; i < curCommand->numArguments; i++)
+    {
+        if(strcmp(curCommand->commands[i], "exit") == 0)
+        {
+            exitShell = true;
+            return exitShell;
+        }        
+    }
+
+    return exitShell;
+}
 
 /*
 *   C shell that implements a subset of features such as providing a
@@ -99,20 +120,20 @@ void printCommandElements(struct commandElements* curCommand)
 */
 int main()
 {
-    struct commandElements *curCommand;
+    struct commandElements* curCommand;
     bool exitShell = false;
 
     // Show shell prompt to user
     printf("\n");
-    // do
-    // {
-    curCommand = getCommandLine();
+    do
+    {
+        curCommand = getCommandLine();
 
-    printCommandElements(curCommand);
+        printCommandElements(curCommand);
 
-    //     exitShell = parseCommandLine(commandLine);
-    // }
-    // while(!exitShell);
+        exitShell = runCommands(curCommand);
+    }
+    while(!exitShell);
 
     return EXIT_SUCCESS;
 }
