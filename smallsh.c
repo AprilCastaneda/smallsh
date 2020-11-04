@@ -10,7 +10,7 @@
 #define MAX_COMMAND_LINE_LENGTH 2049 // 2048 characters plus null at the end
 #define MAX_COMMAND_LINE_ARGUMENTS 512
 
-int processIDs[MAX_COMMAND_LINE_ARGUMENTS];
+int fgProcessIDs[MAX_COMMAND_LINE_ARGUMENTS];
 int pidIndex = 0;
 
 /* struct for command line elements */
@@ -19,6 +19,7 @@ struct commandElements
     char* commands[MAX_COMMAND_LINE_ARGUMENTS];
     char* inputFile;
     char* outputFile;
+    char* exitStatus;
     bool inputRedirect;
     bool outputRedirect;
     bool fg;    // false if & found at end of command line
@@ -87,6 +88,8 @@ struct commandElements* parseCommandLine(char* commandLine)
     // Initialize elements of curCommand struct
     curCommand->inputRedirect = false;
     curCommand->outputRedirect = false;
+    curCommand->exitStatus = calloc(256, sizeof(char));
+    strcpy(curCommand->exitStatus, "exit value 0");
 
     // For use with strtok_r
     char *saveptr;
@@ -219,7 +222,6 @@ void printCommandElements(struct commandElements* curCommand)
 void runExitCommand()
 {
     int i;
-    int arraySize = pidIndex;
 
     printf("Is at run Exit command\n");
     fflush(stdout);
@@ -227,15 +229,19 @@ void runExitCommand()
     // Kill any other processes or jobs that shell has started
     // Idea: Go through list of processIDs from end, wait until each 
     // process is killed, then kill own process.
-    for(i = 0; i < arraySize; i++)
+    for(i = 0; i < MAX_COMMAND_LINE_ARGUMENTS; i++)
     {
-        printf("Kill processID: %d\n", processIDs[i]);
-        fflush(stdout);
-        kill(processIDs[i], SIGTERM);
+        if(fgProcessIDs[i] != -1)
+        {
+            printf("Killing processID: %d\n", fgProcessIDs[i]);
+            fflush(stdout);
+            kill(fgProcessIDs[i], SIGTERM);
+        }
     }
 
     // Status should ignore this command
     // Shell will be killed in main() by return EXIT_SUCCESS;
+    // exit(0);
 }
 
 /*
@@ -310,24 +316,97 @@ int runCdCommand(struct commandElements* curCommand, int i)
 }
 
 /*
+*
+*/
+void addToFgList(int pid)
+{
+    int i;
+
+    for(i = 0; i < MAX_COMMAND_LINE_ARGUMENTS; i++)
+    {
+        if(fgProcessIDs[i] == -1)
+        {
+            fgProcessIDs[i] = pid;
+            break;
+        }
+    }
+}
+
+/*
 *   Run any other commands using fork(), exec(), and waitpid()
 *   Foreground commands: any command without an & at the end. Shell
 *   must wait for the completion of the command before prompting for
 *   the next command. Do not return command line access until child
 *   terminates.
 */
-int runOtherCommands(struct commandElements* curCommand, int i)
+void runOtherCommands(struct commandElements* curCommand)
 {
     // When non-built in command is received, fork off a child
     
-    // First, determine if foreground command
+    // First, determine if foreground/background command
+    // If foreground
     if(curCommand->fg == true)
     {
         printf("Foreground: true\n");
+        fflush(stdout);
+        pid_t spawnpid = -5;
+        int childExitStatus;
+        char exitStatus[256];
+
+        spawnpid = fork();
+        switch(spawnpid)
+        {
+            case -1:
+                perror("fork() failed!");
+                fflush(stderr);
+                exit(1);
+                break;
+            case 0:     // Child execution
+                printf("CHILD termination\n");
+                fflush(stdout);
+                // Add to fgProcessIDs array
+                addToFgList(getpid());
+                // Add child to running processes
+                break;
+            default:    // Parent execution
+                // addToFgList(getpid());
+                spawnpid = waitpid(spawnpid, &childExitStatus, 0);
+
+                printf("Parent's waiting is done as the child with pid %d exited\n", spawnpid);
+                fflush(stdout);
+                
+                if(WIFEXITED(childExitStatus))
+                {
+                    // Change exit status to string
+                    sprintf(exitStatus, "%d", WEXITSTATUS(childExitStatus));
+
+                    // Then concatenate exit status and store in curCommand struct
+                    strcpy(curCommand->exitStatus, "exit value ");
+                    strcat(curCommand->exitStatus, exitStatus);
+
+                    printf("Child %d exited normally with %s\n", spawnpid, curCommand->exitStatus);
+                    fflush(stdout);
+                }
+                else
+                {
+                    // Change termination signal to string
+                    sprintf(exitStatus, "%d", WTERMSIG(childExitStatus));
+
+                    // Then concatenate exit status and store in curCommand struct
+                    strcpy(curCommand->exitStatus, "terminated by signal ");
+                    strcat(curCommand->exitStatus, exitStatus);
+
+                    printf("Child %d exited abnormally %s\n", spawnpid, curCommand->exitStatus);
+                    fflush(stdout);
+                }
+                exit(0);
+                break;
+        }
     }
     else
     {
         printf("Background: true\n");
+        fflush(stdout);
     }
 
     // Child will use a function from the exec() family of functions
@@ -343,8 +422,6 @@ int runOtherCommands(struct commandElements* curCommand, int i)
 
     // A child process must terminate after running a command (whether
     // the command is successful or it fails)
-
-    return i;
 }
 
 /*
@@ -400,20 +477,30 @@ bool runCommands(struct commandElements* curCommand)
                 // Prints out either the exit status or the
                 // terminating signal of the last foreground process
                 // ran by the shell
-                // If exit status
-                printf("exit value %d\n", lastFgStatus);
-                fflush(stdout);
-                // or if terminating signal
-                printf("terminated by signal %d\n", lastFgSignal);
+                printf("%s\n", curCommand->exitStatus);
                 fflush(stdout);
                 break;
             default: // none built in
                 printf("Non built in command\n");
                 fflush(stdout);
-                i = runOtherCommands(curCommand, i);
+                runOtherCommands(curCommand);
+                break;
         }
     }
     return isExiting;
+}
+
+/*
+*
+*/
+void initializePIDList()
+{
+    int i;
+
+    for(i = 0; i < MAX_COMMAND_LINE_ARGUMENTS; i++)
+    {
+        fgProcessIDs[i] = -1;
+    }
 }
 
 /*
@@ -431,6 +518,9 @@ int main()
 {
     struct commandElements* curCommand;
     bool isExiting = false;
+
+    // Initialize process ID list
+    initializePIDList();
 
     // Create linked list of commands
     printf("\n");
