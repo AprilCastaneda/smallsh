@@ -23,6 +23,7 @@ struct commandElements
     bool outputRedirect;
     bool fg;    // false if & found at end of command line
     bool bg;    // true if & found at end of command line
+    bool ignore;    // If command line is blank or a comment
     int pid;
     int numArguments;
     struct commandElements* next;
@@ -65,7 +66,20 @@ struct commandElements* parseCommandLine(char* commandLine)
     // Get index of newline char and overwrite it with 0
     commandLine[strcspn(commandLine, "\n")] = 0;
 
-    // printf("You typed in: %s\n", commandLine);
+    // printf("What you typed: %s\n", commandLine);
+    // fflush(stdout);
+
+    // Check if command line is a blank line or is a comment that
+    // starts with '#'
+    if(commandLine[0] == 0 || commandLine[0] == '#')
+    {
+        curCommand->ignore = true;
+        return curCommand;  // return immediately as no other info needed
+    }
+    else
+    {
+        curCommand->ignore = false;
+    }
 
     // Set if command will run in foreground or background
     setCommandPosition(commandLine, curCommand);
@@ -133,6 +147,21 @@ struct commandElements* getCommandLine()
 
     // Get command line until a newline is read
     fgets(commandLine, MAX_COMMAND_LINE_LENGTH, stdin);
+
+    // Get pointer to first occurence of "$$" in commandLine
+    // Reference: http://www.cplusplus.com/reference/cstring/strstr/
+    char* chPtr = strstr(commandLine, "$$");
+    char sPid[256]; // buffer to store int pid transformed to string
+
+    // Go through commandLine and expand any instance of "$$" in a
+    // command into the processID of smallsh itself
+    // Also, transform processID into string
+    while(chPtr != NULL)
+    {
+        sprintf(sPid, "%d", getpid());
+        strncpy(chPtr, sPid, strlen("$$"));
+        chPtr = strstr(commandLine, "$$");
+    }
 
     // Parse command line into struct
     return parseCommandLine(commandLine);
@@ -367,9 +396,13 @@ int main()
     {
         curCommand = getCommandLine();
 
-        printCommandElements(curCommand); // For testing only
+        // Check if curCommand should not be ignored and commands ran
+        if(!curCommand->ignore)
+        {
+            printCommandElements(curCommand); // For testing only
 
-        isExiting = runCommands(curCommand);
+            isExiting = runCommands(curCommand);
+        }
     }
     while(!isExiting);
 
