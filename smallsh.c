@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define MAX_COMMAND_LINE_LENGTH 2049 // 2048 characters plus null at the end
 #define MAX_COMMAND_LINE_ARGUMENTS 512
@@ -356,8 +357,8 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
     
     spawnpid = waitpid(spawnpid, &childExitStatus, 0);
 
-    printf("Parent's waiting is done as the child with pid %d exited\n", spawnpid);
-    fflush(stdout);
+    // printf("Parent's waiting is done as the child with pid %d exited\n", spawnpid);
+    // fflush(stdout);
     
     if(WIFEXITED(childExitStatus))
     {
@@ -371,18 +372,18 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
         printf("Child %d exited normally with %s\n", spawnpid, curCommand->exitStatus);
         fflush(stdout);
     }
-    else
-    {
-        // Change termination signal to string
-        sprintf(exitStatus, "%d", WTERMSIG(childExitStatus));
+    // else
+    // {
+    //     // Change termination signal to string
+    //     sprintf(exitStatus, "%d", WTERMSIG(childExitStatus));
 
-        // Then concatenate exit status and store in curCommand struct
-        strcpy(curCommand->exitStatus, "terminated by signal ");
-        strcat(curCommand->exitStatus, exitStatus);
+    //     // Then concatenate exit status and store in curCommand struct
+    //     strcpy(curCommand->exitStatus, "terminated by signal ");
+    //     strcat(curCommand->exitStatus, exitStatus);
 
-        printf("Child %d exited abnormally %s\n", spawnpid, curCommand->exitStatus);
-        fflush(stdout);
-    }
+    //     printf("Child %d exited abnormally %s\n", spawnpid, curCommand->exitStatus);
+    //     fflush(stdout);
+    // }
 }
 
 /*
@@ -390,9 +391,11 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 */
 void runFGProcess(struct commandElements* curCommand, int i)
 {
-    printf("Foreground: true\n");
-    fflush(stdout);
     pid_t spawnpid = -5;
+    pid_t childpid;
+    int error;
+    int childExitStatus;
+    char exitStatus[256];
 
     spawnpid = fork();
     switch(spawnpid)
@@ -403,17 +406,33 @@ void runFGProcess(struct commandElements* curCommand, int i)
             // exit(1);
             break;
         case 0:     // Child execution
-            printf("CHILD termination\n");
-            fflush(stdout);
             // Add to fgProcessIDs array
-            addToFGList(getpid());
+            childpid = getpid();
+            addToFGList(childpid);
             // Child will use a function from the exec() family of functions
             // to run the command
-            execvp(curCommand->commands[0], curCommand->commands);
-            perror("execvep");
+            error = execvp(curCommand->commands[0], curCommand->commands);
+            perror("execvp");
 
+            // If there is an error, then update status
+            if(error == -1)
+            {
+                // Change termination signal to string
+                // LOOK OVER AGAIN. SHOULD I SET TO 1?
+                sprintf(exitStatus, "%d", errno);
+
+                // Then concatenate exit status and store in curCommand struct
+                strcpy(curCommand->exitStatus, "terminated by signal ");
+                strcat(curCommand->exitStatus, exitStatus);
+
+                printf("Child %d exited abnormally %s\n", childpid, curCommand->exitStatus);
+                fflush(stdout); 
+
+                // Terminate this child
+                kill(childpid, SIGTERM); 
+            }
             // Remove from fgProcessIDs array
-            removeFromFGList(getpid());
+            removeFromFGList(childpid);
             // exit(2);
 
             // Shell should use PATH variable to look for non-built in
