@@ -310,6 +310,44 @@ int runCdCommand(struct commandElements* curCommand, int i)
 }
 
 /*
+*   Run any other commands using fork(), exec(), and waitpid()
+*   Foreground commands: any command without an & at the end. Shell
+*   must wait for the completion of the command before prompting for
+*   the next command. Do not return command line access until child
+*   terminates.
+*/
+int runOtherCommands(struct commandElements* curCommand, int i)
+{
+    // When non-built in command is received, fork off a child
+    
+    // First, determine if foreground command
+    if(curCommand->fg == true)
+    {
+        printf("Foreground: true\n");
+    }
+    else
+    {
+        printf("Background: true\n");
+    }
+
+    // Child will use a function from the exec() family of functions
+    // to run the command
+
+    // Shell should use PATH variable to look for non-built in
+    // commands
+    // Shell should allow shell scripts to be executed
+
+    // If a command fails because the shell could not find the
+    // command to run, then the shell will print an error message and
+    // set the exit status to 1
+
+    // A child process must terminate after running a command (whether
+    // the command is successful or it fails)
+
+    return i;
+}
+
+/*
 *
 */
 bool runCommands(struct commandElements* curCommand)
@@ -351,10 +389,14 @@ bool runCommands(struct commandElements* curCommand)
                 return isExiting;   // return immediately to exit
                 break;
             case 2: // cd command
+                curCommand->fg = true;
+                curCommand->bg = false;
                 // If no argument after cd
                 i = runCdCommand(curCommand, i); // Change index if needed
                 break;
             case 3: // status command
+                curCommand->fg = true;
+                curCommand->bg = false;
                 // Prints out either the exit status or the
                 // terminating signal of the last foreground process
                 // ran by the shell
@@ -366,8 +408,9 @@ bool runCommands(struct commandElements* curCommand)
                 fflush(stdout);
                 break;
             default: // none built in
-                printf("Default\n");
+                printf("Non built in command\n");
                 fflush(stdout);
+                i = runOtherCommands(curCommand, i);
         }
     }
     return isExiting;
