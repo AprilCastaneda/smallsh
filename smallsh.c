@@ -318,7 +318,24 @@ int runCdCommand(struct commandElements* curCommand, int i)
 /*
 *
 */
-void addToFgList(int pid)
+void removeFromFGList(int pid)
+{
+    int i;
+
+    for(i = 0; i < MAX_COMMAND_LINE_ARGUMENTS; i++)
+    {
+        if(fgProcessIDs[i] == pid)
+        {
+            fgProcessIDs[i] = -1;
+            break;
+        }
+    }
+}
+
+/*
+*
+*/
+void addToFGList(int pid)
 {
     int i;
 
@@ -366,14 +383,12 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
         printf("Child %d exited abnormally %s\n", spawnpid, curCommand->exitStatus);
         fflush(stdout);
     }
-
-    exit(0);
 }
 
 /*
 *
 */
-void runFGProcess(struct commandElements* curCommand)
+void runFGProcess(struct commandElements* curCommand, int i)
 {
     printf("Foreground: true\n");
     fflush(stdout);
@@ -385,17 +400,37 @@ void runFGProcess(struct commandElements* curCommand)
         case -1:
             perror("fork() failed!");
             fflush(stderr);
-            exit(1);
+            // exit(1);
             break;
         case 0:     // Child execution
             printf("CHILD termination\n");
             fflush(stdout);
             // Add to fgProcessIDs array
-            addToFgList(getpid());
-            // Add child to running processes
+            addToFGList(getpid());
+            // Child will use a function from the exec() family of functions
+            // to run the command
+            execvp(curCommand->commands[0], curCommand->commands);
+            perror("execvep");
+
+            // Remove from fgProcessIDs array
+            removeFromFGList(getpid());
+            // exit(2);
+
+            // Shell should use PATH variable to look for non-built in
+            // commands
+            // Shell should allow shell scripts to be executed
+
+            // If a command fails because the shell could not find the
+            // command to run, then the shell will print an error message and
+            // set the exit status to 1
+
+            // A child process must terminate after running a command (whether
+            // the command is successful or it fails)
+
             break;
         default:    // Parent execution
             runFGParent(spawnpid, curCommand);
+            // exit(0);
             break;
     }
 }
@@ -407,7 +442,7 @@ void runFGProcess(struct commandElements* curCommand)
 *   the next command. Do not return command line access until child
 *   terminates.
 */
-void runOtherCommands(struct commandElements* curCommand)
+void runOtherCommands(struct commandElements* curCommand, int i)
 {
     // When non-built in command is received, fork off a child
     
@@ -415,7 +450,7 @@ void runOtherCommands(struct commandElements* curCommand)
     // If foreground
     if(curCommand->fg == true)
     {
-        runFGProcess(curCommand);
+        runFGProcess(curCommand, i);
     }
     else
     {
@@ -497,7 +532,7 @@ bool runCommands(struct commandElements* curCommand)
             default: // none built in
                 printf("Non built in command\n");
                 fflush(stdout);
-                runOtherCommands(curCommand);
+                runOtherCommands(curCommand, i);
                 break;
         }
     }
