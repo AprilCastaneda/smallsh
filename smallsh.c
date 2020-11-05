@@ -625,7 +625,7 @@ void runFGChild(struct commandElements* curCommand)
     // Child will use a function from the exec() family of functions
     // to run the command
     error = execvp(curCommand->commands[0], curCommand->commands);
-    perror();
+    perror("curCommand->commands[0]: ");
 
     // If there is an error, then kill child
     if(error == -1)
