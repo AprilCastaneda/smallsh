@@ -15,6 +15,7 @@
 int processIDs[MAX_COMMAND_LINE_ARGUMENTS];
 int pidIndex = 0;
 char exitStatus[256];
+bool foregroundOnly = false;
 
 /* struct for command line elements */
 struct commandElements
@@ -34,8 +35,8 @@ struct commandElements
 };
 
 /* struct for handling SIGINT */
-struct sigaction SIGINT_ACTION {0};
-struct sigaction SIGSTP {0};
+struct sigaction SIGINT_action = {0};
+struct sigaction SIGTSTP_action = {0};
 
 /*
 *   Program that sets in struct if command will run in foreground or
@@ -48,10 +49,16 @@ void setCommandPosition(char* commandLine, struct commandElements* curCommand)
 {
     if(commandLine[strlen(commandLine) - 1] == '&')
     {
-        // printf("& is at eol\n");
-        curCommand->fg = false;
-        curCommand->bg = true;
-
+        if(foregroundOnly == false)
+        {
+            curCommand->fg = false;
+            curCommand->bg = true;
+        }
+        else
+        {
+            curCommand->fg = true;
+            curCommand->bg = false;
+        }
         // Overwrite '&' as it has already been used to determine
         // command position
         commandLine[strlen(commandLine) - 1] = 0;
@@ -261,6 +268,29 @@ void printCommandElements(struct commandElements* curCommand)
 }
 
 /*
+*
+*/
+// void handle_SIGINT(int signo)
+// {
+//     write(STDOUT_FILENO, "killing\n", 9);
+//     kill(getpid(), 2);
+// }
+
+void handle_SIGTSTP(int signo)
+{
+    if(foregroundOnly)
+    {
+        foregroundOnly = false;
+        write(STDOUT_FILENO, "\nExiting foreground-only mode\n", 31);
+    }
+    else
+    {
+        foregroundOnly = true;
+        write(STDOUT_FILENO, "\nEntering foreground-only mode (& is now ignored)\n", 51);
+    }
+}
+
+/*
 *   Does not have to support i/o redirections, does not have to set any
 *   exit status, if used as bg process with & - ignore option and run
 *   command in foreground anyway, i.e. don't display an error.
@@ -283,8 +313,8 @@ void runExitCommand()
     {
         if(processIDs[i] != -1)
         {
-            printf("Killing processID: %d\n", processIDs[i]);
-            fflush(stdout);
+            // printf("Killing processID: %d\n", processIDs[i]);
+            // fflush(stdout);
             kill(processIDs[i], SIGTERM);
         }
     }
@@ -403,14 +433,17 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 {
     int childExitStatus;
     char status[256];
-    
+    SIGINT_action.sa_handler = SIG_IGN;
     spawnpid = waitpid(spawnpid, &childExitStatus, 0);
 
+    
     // printf("Parent's waiting is done as the child with pid %d exited\n", spawnpid);
     // fflush(stdout);
     
     if(WIFEXITED(childExitStatus))
     {
+        
+        sigaction(SIGINT, &SIGINT_action, NULL);
         // Change exit status to string
         sprintf(status, "%d", WEXITSTATUS(childExitStatus));
 
@@ -424,6 +457,8 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
     }
     else
     {
+        // SIGINT_action.sa_handler = SIG_IGN;
+        sigaction(SIGINT, &SIGINT_action, NULL);
         // Change termination signal to string
         sprintf(status, "%d", WTERMSIG(childExitStatus));
         // sprintf(status, "%d", errno);
@@ -563,6 +598,12 @@ void outputRedirect(struct commandElements* curCommand, bool redir)
 */
 void runFGChild(struct commandElements* curCommand)
 {
+    SIGINT_action.sa_handler = SIG_DFL;
+    sigaction(SIGINT, &SIGINT_action, NULL);
+
+    SIGTSTP_action.sa_handler = SIG_IGN;
+    sigaction(SIGTSTP, &SIGTSTP_action, NULL); 
+
     // Add to fgProcessIDs array
     pid_t childpid;
     int error;
@@ -584,7 +625,7 @@ void runFGChild(struct commandElements* curCommand)
     // Child will use a function from the exec() family of functions
     // to run the command
     error = execvp(curCommand->commands[0], curCommand->commands);
-    perror("execvp");
+    perror();
 
     // If there is an error, then kill child
     if(error == -1)
@@ -659,6 +700,9 @@ void runBGParent(pid_t spawnpid, struct commandElements* curCommand)
 */
 void runBGChild(struct commandElements* curCommand)
 {
+    SIGTSTP_action.sa_handler = SIG_IGN;
+    sigaction(SIGTSTP, &SIGTSTP_action, NULL); 
+
     // Add to fgProcessIDs array
     pid_t childpid;
     int error;
@@ -902,7 +946,7 @@ void initializeExitStatus()
 */
 void initializeSIGINT()
 {
-    SIGINT_action.sa_handler = handle_SIGINT;
+    SIGINT_action.sa_handler = SIG_IGN; // ignore as a default
     sigfillset(&SIGINT_action.sa_mask); // block all catchable signals while handle_SIGINT is running
     SIGINT_action.sa_flags = 0; // no flags set
     sigaction(SIGINT, &SIGINT_action, NULL);
@@ -912,13 +956,13 @@ void initializeSIGINT()
 *   Fill out SIGSTP_action struct. Register handle_SIGSTP as the
 *   signal handler.
 */
-void initializeSIGSTP()
+void initializeSIGTSTP()
 {
-    SIGSTP_ACTIION.sa_handler = handle_SIGSTP;
-    sigfillset(&SIGSTP_action.sa_mask); 
+    SIGTSTP_action.sa_handler = handle_SIGTSTP;
+    sigfillset(&SIGTSTP_action.sa_mask); 
     // block all catchable signals while handle_SIGSTP is running
-    SIGSTP_action.sa_flags = 0; // no flags set
-    sigaction(SIGSTP, &SIGSTP_action, NULL);
+    SIGTSTP_action.sa_flags = 0; // no flags set
+    sigaction(SIGTSTP, &SIGTSTP_action, NULL);
 }
 
 /*
@@ -984,7 +1028,7 @@ int main()
     initializePIDList();
     initializeExitStatus();
     initializeSIGINT();
-    initializeSIGSTP();
+    initializeSIGTSTP();
 
     // Create linked list of commands
     printf("\n");
