@@ -30,8 +30,12 @@ struct commandElements
     bool ignore;    // If command line is blank or a comment
     int pid;
     int numArguments;
-    struct commandElements* next;
+    // struct commandElements* next;
 };
+
+/* struct for handling SIGINT */
+struct sigaction SIGINT_ACTION {0};
+struct sigaction SIGSTP {0};
 
 /*
 *   Program that sets in struct if command will run in foreground or
@@ -893,6 +897,31 @@ void initializeExitStatus()
 }
 
 /*
+*   Fill out SIGINT_action struct. Register handle_SIGINT as the
+*   signal handler.
+*/
+void initializeSIGINT()
+{
+    SIGINT_action.sa_handler = handle_SIGINT;
+    sigfillset(&SIGINT_action.sa_mask); // block all catchable signals while handle_SIGINT is running
+    SIGINT_action.sa_flags = 0; // no flags set
+    sigaction(SIGINT, &SIGINT_action, NULL);
+}
+
+/*
+*   Fill out SIGSTP_action struct. Register handle_SIGSTP as the
+*   signal handler.
+*/
+void initializeSIGSTP()
+{
+    SIGSTP_ACTIION.sa_handler = handle_SIGSTP;
+    sigfillset(&SIGSTP_action.sa_mask); 
+    // block all catchable signals while handle_SIGSTP is running
+    SIGSTP_action.sa_flags = 0; // no flags set
+    sigaction(SIGSTP, &SIGSTP_action, NULL);
+}
+
+/*
 *
 */
 void checkBGProcesses()
@@ -954,6 +983,8 @@ int main()
     // Initialize global variables
     initializePIDList();
     initializeExitStatus();
+    initializeSIGINT();
+    initializeSIGSTP();
 
     // Create linked list of commands
     printf("\n");
