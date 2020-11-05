@@ -13,6 +13,7 @@
 
 int fgProcessIDs[MAX_COMMAND_LINE_ARGUMENTS];
 int pidIndex = 0;
+char exitStatus[256];
 
 /* struct for command line elements */
 struct commandElements
@@ -20,7 +21,7 @@ struct commandElements
     char* commands[MAX_COMMAND_LINE_ARGUMENTS];
     char* inputFile;
     char* outputFile;
-    char* exitStatus;
+    // char* exitStatus;
     bool inputRedirect;
     bool outputRedirect;
     bool fg;    // false if & found at end of command line
@@ -89,8 +90,8 @@ struct commandElements* parseCommandLine(char* commandLine)
     // Initialize elements of curCommand struct
     curCommand->inputRedirect = false;
     curCommand->outputRedirect = false;
-    curCommand->exitStatus = calloc(256, sizeof(char));
-    strcpy(curCommand->exitStatus, "exit value 0");
+    // curCommand->exitStatus = calloc(256, sizeof(char));
+    // strcpy(curCommand->exitStatus, "exit value 0");
 
     // For use with strtok_r
     char *saveptr;
@@ -353,7 +354,7 @@ void addToFGList(int pid)
 void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 {
     int childExitStatus;
-    char exitStatus[256];
+    char status[256];
     
     spawnpid = waitpid(spawnpid, &childExitStatus, 0);
 
@@ -363,27 +364,74 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
     if(WIFEXITED(childExitStatus))
     {
         // Change exit status to string
-        sprintf(exitStatus, "%d", WEXITSTATUS(childExitStatus));
+        sprintf(status, "%d", WEXITSTATUS(childExitStatus));
 
         // Then concatenate exit status and store in curCommand struct
-        strcpy(curCommand->exitStatus, "exit value ");
-        strcat(curCommand->exitStatus, exitStatus);
+        memset(exitStatus,0,strlen(exitStatus));
+        strcpy(exitStatus, "exit value ");
+        strcat(exitStatus, status);
 
-        printf("Child %d exited normally with %s\n", spawnpid, curCommand->exitStatus);
+        printf("Child %d exited normally with %s\n", spawnpid, exitStatus);
         fflush(stdout);
     }
-    // else
-    // {
-    //     // Change termination signal to string
-    //     sprintf(exitStatus, "%d", WTERMSIG(childExitStatus));
+    else
+    {
+        // Change termination signal to string
+        sprintf(status, "%d", WTERMSIG(childExitStatus));
+        // sprintf(status, "%d", errno);
 
-    //     // Then concatenate exit status and store in curCommand struct
-    //     strcpy(curCommand->exitStatus, "terminated by signal ");
-    //     strcat(curCommand->exitStatus, exitStatus);
+        // Then concatenate exit status and store in curCommand struct
+        memset(exitStatus, 0, strlen(exitStatus));
+        strcpy(exitStatus, "terminated by signal ");
+        strcat(exitStatus, status);
 
-    //     printf("Child %d exited abnormally %s\n", spawnpid, curCommand->exitStatus);
-    //     fflush(stdout);
-    // }
+        printf("Child %d exited abnormally %s\n", spawnpid, exitStatus);
+        fflush(stdout);
+    }
+}
+
+/*
+*
+*/
+void runFGChild(struct commandElements* curCommand)
+{
+    // Add to fgProcessIDs array
+    pid_t childpid;
+    int error;
+    // int childExitStatus;
+    char status[256];
+    
+    childpid = getpid();
+    addToFGList(childpid);
+    // Child will use a function from the exec() family of functions
+    // to run the command
+    error = execvp(curCommand->commands[0], curCommand->commands);
+    perror("execvp");
+
+    // If there is an error, then kill child
+    if(error == -1)
+    {
+        printf("Child %d exited abnormally %d\n", childpid, errno);
+        // printf("Child %d exited abnormally %s\n", childpid, exitStatus);
+        fflush(stdout); 
+
+        // Terminate this child
+        kill(childpid, errno); 
+    }
+    // Remove from fgProcessIDs array
+    removeFromFGList(childpid);
+    // exit(2);
+
+    // Shell should use PATH variable to look for non-built in
+    // commands
+    // Shell should allow shell scripts to be executed
+
+    // If a command fails because the shell could not find the
+    // command to run, then the shell will print an error message and
+    // set the exit status to 1
+
+    // A child process must terminate after running a command (whether
+    // the command is successful or it fails)
 }
 
 /*
@@ -392,10 +440,6 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 void runFGProcess(struct commandElements* curCommand, int i)
 {
     pid_t spawnpid = -5;
-    pid_t childpid;
-    int error;
-    int childExitStatus;
-    char exitStatus[256];
 
     spawnpid = fork();
     switch(spawnpid)
@@ -406,52 +450,22 @@ void runFGProcess(struct commandElements* curCommand, int i)
             // exit(1);
             break;
         case 0:     // Child execution
-            // Add to fgProcessIDs array
-            childpid = getpid();
-            addToFGList(childpid);
-            // Child will use a function from the exec() family of functions
-            // to run the command
-            error = execvp(curCommand->commands[0], curCommand->commands);
-            perror("execvp");
-
-            // If there is an error, then update status
-            if(error == -1)
-            {
-                // Change termination signal to string
-                // LOOK OVER AGAIN. SHOULD I SET TO 1?
-                sprintf(exitStatus, "%d", errno);
-
-                // Then concatenate exit status and store in curCommand struct
-                strcpy(curCommand->exitStatus, "terminated by signal ");
-                strcat(curCommand->exitStatus, exitStatus);
-
-                printf("Child %d exited abnormally %s\n", childpid, curCommand->exitStatus);
-                fflush(stdout); 
-
-                // Terminate this child
-                kill(childpid, SIGTERM); 
-            }
-            // Remove from fgProcessIDs array
-            removeFromFGList(childpid);
-            // exit(2);
-
-            // Shell should use PATH variable to look for non-built in
-            // commands
-            // Shell should allow shell scripts to be executed
-
-            // If a command fails because the shell could not find the
-            // command to run, then the shell will print an error message and
-            // set the exit status to 1
-
-            // A child process must terminate after running a command (whether
-            // the command is successful or it fails)
-
+            runFGChild(curCommand);
             break;
         default:    // Parent execution
             runFGParent(spawnpid, curCommand);
             // exit(0);
             break;
     }
+}
+
+/*
+*   Commands ran as background processes. Shell will not wait for
+*   these commands to complete.
+*/
+void runBGProcess(struct commandElements* curCommand, int i)
+{
+
 }
 
 /*
@@ -475,6 +489,7 @@ void runOtherCommands(struct commandElements* curCommand, int i)
     {
         printf("Background: true\n");
         fflush(stdout);
+        runBGProcess(curCommand, i);
     }
 
     // Child will use a function from the exec() family of functions
@@ -545,7 +560,7 @@ bool runCommands(struct commandElements* curCommand)
                 // Prints out either the exit status or the
                 // terminating signal of the last foreground process
                 // ran by the shell
-                printf("%s\n", curCommand->exitStatus);
+                printf("%s\n", exitStatus);
                 fflush(stdout);
                 break;
             default: // none built in
@@ -572,6 +587,14 @@ void initializePIDList()
 }
 
 /*
+*
+*/
+void initializeExitStatus()
+{
+    strcpy(exitStatus, "exit value 0");
+}
+
+/*
 *   C shell that implements a subset of features such as providing a
 *   prompt for running commands, handling blank lines and comments,
 *   providing expansion for the variable $$, executing three commands
@@ -587,8 +610,9 @@ int main()
     struct commandElements* curCommand;
     bool isExiting = false;
 
-    // Initialize process ID list
+    // Initialize global variables
     initializePIDList();
+    initializeExitStatus();
 
     // Create linked list of commands
     printf("\n");
