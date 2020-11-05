@@ -408,7 +408,7 @@ void runFGChild(struct commandElements* curCommand)
     // Check if i/o redirect
     if(curCommand->inputRedirect == true) 
     {
-        printf("in input redirect\n");
+        printf("in input redirect file: %s\n", curCommand->inputFile);
         fflush(stdout);
         
         int sourceFD;
@@ -435,7 +435,7 @@ void runFGChild(struct commandElements* curCommand)
     }
     if(curCommand->outputRedirect == true)
     {
-        printf("in output redirect\n");
+        printf("in output redirect file: %s\n", curCommand->outputFile);
         fflush(stdout);
         
         int targetFD;
@@ -451,7 +451,7 @@ void runFGChild(struct commandElements* curCommand)
         // printf("The file descriptor for targetFD is %d\n", targetFD);
         // fflush(stdout);
         
-        result = dup2(targetFD, 0);
+        result = dup2(targetFD, 1);
         
         if(result == -1)
         {
