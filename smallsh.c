@@ -12,10 +12,10 @@
 #define MAX_COMMAND_LINE_LENGTH 2049 // 2048 characters plus null at the end
 #define MAX_COMMAND_LINE_ARGUMENTS 512
 
-int processIDs[MAX_COMMAND_LINE_ARGUMENTS];
-int pidIndex = 0;
-char exitStatus[256];
-bool foregroundOnly = false;
+// Global variables
+int processIDs[MAX_COMMAND_LINE_ARGUMENTS]; // Holds running bg processes
+char exitStatus[256]; // Hold exitStatus
+bool foregroundOnly = false; // determines if fg only mode
 
 /* struct for command line elements */
 struct commandElements
@@ -44,6 +44,7 @@ struct sigaction SIGTSTP_action = {0};
 *   appears at the end of the commandLine, then the command will run
 *   in the background. Otherwise, command will run in the foreground.
 *   Struct bool values for fg and bg are set accordingly.
+*   Special case if global var foregroundOnly set, then fg is true.
 */
 void setCommandPosition(char* commandLine, struct commandElements* curCommand)
 {
@@ -78,9 +79,6 @@ struct commandElements* parseCommandLine(char* commandLine)
 {
     struct commandElements *curCommand = malloc(sizeof(struct commandElements));
 
-    // printf("What you typed: %s\n", commandLine);
-    // fflush(stdout);
-
     // Check if command line is a blank line or is a comment that
     // starts with '#'
     if(commandLine[0] == 0 || commandLine[0] == '#')
@@ -99,13 +97,11 @@ struct commandElements* parseCommandLine(char* commandLine)
     // Initialize elements of curCommand struct
     curCommand->inputRedirect = false;
     curCommand->outputRedirect = false;
-    // curCommand->exitStatus = calloc(256, sizeof(char));
-    // strcpy(curCommand->exitStatus, "exit value 0");
 
     // For use with strtok_r
     char *saveptr;
 
-    // The first token is the title
+    // Parse command into tokens
     char* token = strtok_r(commandLine, " ", &saveptr);
     int index = 0;
     int numArguments = 0;
@@ -114,8 +110,6 @@ struct commandElements* parseCommandLine(char* commandLine)
     // If special symbols <, >, & found, process accordingly
     while(token != NULL)
     {
-        // printf("This word: %s\n", token);
-
         // Check if token is a special symbol
         switch(token[0])
         {
@@ -148,7 +142,7 @@ struct commandElements* parseCommandLine(char* commandLine)
 }
 
 /*
-*
+*   Finds instances of "$$" and replaces them with pid of shell.
 */
 char* replaceString(char* commandLineCopy)
 {
@@ -164,29 +158,16 @@ char* replaceString(char* commandLineCopy)
     // The first token is the title
     char* token = strtok_r(commandLineCopy, "$$", &saveptr);
     
-    // printf("Token 1: %s\n", token);
-    // fflush(stdout);
-
+    // If $$ is found, token length will be different than original
     if(strlen(token) != origLen)
     {
-        // The next token is the year
+        // Store string without $$
         while(token != NULL)
         {
             strcpy(tempLine, token);
             strcat(tempLine, spid);
-            // printf("Current templine: %s\n", tempLine);
-            // fflush(stdout);
             token = strtok_r(NULL, "$$", &saveptr);
-            // if(token != NULL)
-            // {
-            //     printf("Next token: %s\n", token);
-            //     fflush(stdout);
-            // }
         }
-
-        // printf("test templine: %s\n", tempLine);
-        // fflush(stdout);
-
         return tempLine;
     }
     else
@@ -213,6 +194,7 @@ struct commandElements* getCommandLine()
     // Get index of newline char and overwrite it with 0
     commandLine[strcspn(commandLine, "\n")] = 0;
 
+    // Pass copy of commandLine to be replaced if it's not null
     char* tempLine = calloc(MAX_COMMAND_LINE_LENGTH, sizeof(char));
     
     if(commandLine[0] != 0)
@@ -268,14 +250,9 @@ void printCommandElements(struct commandElements* curCommand)
 }
 
 /*
-*
+*   Handle SIGSTP by checking if global foregroundOnly is set. Toggle
+*   value and print appropriate message.
 */
-// void handle_SIGINT(int signo)
-// {
-//     write(STDOUT_FILENO, "killing\n", 9);
-//     kill(getpid(), 2);
-// }
-
 void handle_SIGTSTP(int signo)
 {
     if(foregroundOnly)
@@ -291,60 +268,40 @@ void handle_SIGTSTP(int signo)
 }
 
 /*
-*   Does not have to support i/o redirections, does not have to set any
-*   exit status, if used as bg process with & - ignore option and run
-*   command in foreground anyway, i.e. don't display an error.
 *   When this command is run, shell kills any other processes or jobs
 *   that shell has started before it terminates itself. 
-*   Built in commands do not count as foreground processes for the
-*   status command, i.e., status should ignore this command.
 */
 void runExitCommand()
 {
     int i;
 
-    // printf("Is at run Exit command\n");
-    // fflush(stdout);
-
     // Kill any other processes or jobs that shell has started
-    // Idea: Go through list of processIDs from end, wait until each 
-    // process is killed, then kill own process.
     for(i = 0; i < MAX_COMMAND_LINE_ARGUMENTS; i++)
     {
         if(processIDs[i] != -1)
         {
-            // printf("Killing processID: %d\n", processIDs[i]);
-            // fflush(stdout);
             kill(processIDs[i], SIGTERM);
         }
     }
-
-    // Status should ignore this command
     // Shell will be killed in main() by return EXIT_SUCCESS;
-    // exit(0);
 }
 
 /*
-*
+*   Runs the built in command cd by changing either to HOME or an
+*   assigned directory.
 */
 void runCdCommand(struct commandElements* curCommand)
 {
-    // printf("at cd\n");
-    // fflush(stdout);
-    
     char cwd[256];
     char path[256];
 
+    // If no arguments after cd
     if(curCommand->numArguments == 1)
     {
         // Then change to HOME directory
         getcwd(cwd, sizeof(cwd));
-        // printf("Dir before cd: %s\n", cwd);
-        // fflush(stdout);
         chdir(getenv("HOME"));
         getcwd(cwd, sizeof(cwd));
-        // printf("Dir after cd: %s\n", cwd);
-        // fflush(stdout);
     }
     // If there is an argument, then change to this
     // directory. Command should support both absolute
@@ -353,47 +310,31 @@ void runCdCommand(struct commandElements* curCommand)
     {
         // Get path, which is argument after cd
         strcpy(path, curCommand->commands[1]);
-        // printf("Path after cd: %s\n", path);
-        // fflush(stdout);
-        // Determine if path is absolute e.g. /bin/myfile
-        // or relative e.g. mydir/myfile
         // If absolute, first char is '/', then chdir
         // with path
         char firstChar = path[0];
         if(firstChar == '/')
         {
-            // printf("path is absolute\n");
-            // fflush(stdout);
             getcwd(cwd, sizeof(cwd));
-            // printf("Dir before cd: %s\n", cwd);
-            // fflush(stdout);
             chdir(path);
             getcwd(cwd, sizeof(cwd));
-            // printf("Dir after cd: %s\n", cwd);
-            // fflush(stdout);
         }
         // If relative, first get cwd, add '/',
         // concatenate relative path, then chdir to path
         else
         {
-            // printf("path is relative\n");
-            // fflush(stdout);
             getcwd(cwd, sizeof(cwd));
-            // printf("Dir before cd: %s\n", cwd);
-            // fflush(stdout);
             strcat(cwd, "/");
             strcat(cwd, path);
             strcpy(path, cwd); // Did this as path is a better var name
             chdir(path);
             getcwd(cwd, sizeof(cwd));
-            // printf("Dir after cd: %s\n", cwd);
-            // fflush(stdout);
         }
     }
 }
 
 /*
-*
+*   Take out process ID from list of running ids
 */
 void removeFromPIDList(int pid)
 {
@@ -410,7 +351,7 @@ void removeFromPIDList(int pid)
 }
 
 /*
-*
+*   Add process id to list of running IDs
 */
 void addToPIDList(int pid)
 {
@@ -427,26 +368,25 @@ void addToPIDList(int pid)
 }
 
 /*
-*
+*   Run foreground parent process.
 */
 void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 {
     int childExitStatus;
     char status[256];
     
+    // Change SIGINT to ignore
     SIGINT_action.sa_handler = SIG_IGN;
     sigaction(SIGINT, &SIGINT_action, NULL);
 
     spawnpid = waitpid(spawnpid, &childExitStatus, 0);
 
-    
-    // printf("Parent's waiting is done as the child with pid %d exited\n", spawnpid);
-    // fflush(stdout);
-    
+    // Get exit status
     if(WIFEXITED(childExitStatus))
     {
         SIGINT_action.sa_handler = SIG_IGN;
         sigaction(SIGINT, &SIGINT_action, NULL);
+        
         // Change exit status to string
         sprintf(status, "%d", WEXITSTATUS(childExitStatus));
 
@@ -454,9 +394,6 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
         memset(exitStatus,0,strlen(exitStatus));
         strcpy(exitStatus, "exit value ");
         strcat(exitStatus, status);
-
-        // printf("Child %d exited normally with %s\n", spawnpid, exitStatus);
-        // fflush(stdout);
     }
     else
     {
@@ -465,13 +402,13 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 
         // Change termination signal to string
         sprintf(status, "%d", WTERMSIG(childExitStatus));
-        // sprintf(status, "%d", errno);
 
         // Then concatenate exit status and store in curCommand struct
         memset(exitStatus, 0, strlen(exitStatus));
         strcpy(exitStatus, "terminated by signal ");
         strcat(exitStatus, status);
 
+        // If terminated with 2, print to screen
         if(WTERMSIG(childExitStatus) == 2)
         {
             printf("%s\n", exitStatus);
@@ -481,17 +418,14 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 }
 
 /*
-*
+*   Redirect to file inputFile or /dev/null per boolean value
 */
 void inputRedirect(struct commandElements* curCommand, bool redir)
 {
     int result;
-
-    // printf("in input redirect file: %s\n", curCommand->inputFile);
-    // fflush(stdout);
-    
     int sourceFD;
     
+    // If redirecting, then redirect to inputFile
     if(redir)
     {
         sourceFD = open(curCommand->inputFile, O_RDONLY);
@@ -503,11 +437,7 @@ void inputRedirect(struct commandElements* curCommand, bool redir)
             exit(1);
         }
         
-        // printf("The file descriptor for sourceFD is %d\n", sourceFD);
-        // fflush(stdout);
-        
         result = dup2(sourceFD, 0);
-        
         if(result == -1)
         {
             perror("source dup2() fail\n");
@@ -515,7 +445,7 @@ void inputRedirect(struct commandElements* curCommand, bool redir)
             exit(2);
         }
     }
-    else
+    else // Otherwise, redirect to /dev/null
     {
         sourceFD = open("/dev/null", O_RDONLY);
     
@@ -525,12 +455,8 @@ void inputRedirect(struct commandElements* curCommand, bool redir)
             fflush(stdout);
             exit(1);
         }
-        
-        // printf("The file descriptor for sourceFD is %d\n", sourceFD);
-        // fflush(stdout);
-        
+
         result = dup2(sourceFD, 0);
-        
         if(result == -1)
         {
             perror("source dup2() fail\n");
@@ -541,17 +467,14 @@ void inputRedirect(struct commandElements* curCommand, bool redir)
 }
 
 /*
-*
+*   Redirect to file outputFile or /dev/null per bool value
 */
 void outputRedirect(struct commandElements* curCommand, bool redir)
 {
     int result;
-
-    // printf("in output redirect file: %s\n", curCommand->outputFile);
-    // fflush(stdout);
-    
     int targetFD;
 
+    // If redirecting, then redirect to output file
     if(redir)
     {
         targetFD = open(curCommand->outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -563,11 +486,7 @@ void outputRedirect(struct commandElements* curCommand, bool redir)
             exit(1);
         }
 
-        // printf("The file descriptor for targetFD is %d\n", targetFD);
-        // fflush(stdout);
-        
         result = dup2(targetFD, 1);
-        
         if(result == -1)
         {
             perror("target dup2() fail\n");
@@ -575,7 +494,7 @@ void outputRedirect(struct commandElements* curCommand, bool redir)
             exit(2);
         }
     }
-    else
+    else // otherwise, redirect to /dev/null
     {
         targetFD = open("/dev/null", O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
@@ -586,11 +505,7 @@ void outputRedirect(struct commandElements* curCommand, bool redir)
             exit(1);
         }
 
-        // printf("The file descriptor for targetFD is %d\n", targetFD);
-        // fflush(stdout);
-        
         result = dup2(targetFD, 1);
-        
         if(result == -1)
         {
             perror("target dup2() fail\n");
@@ -601,23 +516,22 @@ void outputRedirect(struct commandElements* curCommand, bool redir)
 }
 
 /*
-*
+*   Run foreground child process
 */
 void runFGChild(struct commandElements* curCommand)
 {
+    // Change SIGINT to default
     SIGINT_action.sa_handler = SIG_DFL;
     sigaction(SIGINT, &SIGINT_action, NULL);
 
+    // Change SIGTSTP to ignore
     SIGTSTP_action.sa_handler = SIG_IGN;
     sigaction(SIGTSTP, &SIGTSTP_action, NULL); 
 
-    // Add to fgProcessIDs array
     pid_t childpid;
     int error;
     char status[256];
-    
     childpid = getpid();
-    // addToFGList(childpid);
 
     // Check if i/o redirect
     if(curCommand->inputRedirect == true) 
@@ -640,42 +554,36 @@ void runFGChild(struct commandElements* curCommand)
     // If there is an error, then kill child
     if(error == -1)
     {
-        // printf("Child %d exited abnormally %d\n", childpid, errno);
-        // printf("Child %d exited abnormally %s\n", childpid, exitStatus);
-        // fflush(stdout); 
-
-        // Terminate this child
         kill(childpid, errno); 
     }
 }
 
 /*
-*
+*   Run all foreground processes, parent and children
 */
 void runFGProcess(struct commandElements* curCommand)
 {
     pid_t spawnpid = -5;
 
+    // Fork child
     spawnpid = fork();
     switch(spawnpid)
     {
         case -1:
             perror("fork() failed!");
             fflush(stderr);
-            // exit(1);
             break;
         case 0:     // Child execution
             runFGChild(curCommand);
             break;
         default:    // Parent execution
             runFGParent(spawnpid, curCommand);
-            // exit(0);
             break;
     }
 }
 
 /*
-*
+*   Run background parent process
 */
 void runBGParent(pid_t spawnpid, struct commandElements* curCommand)
 {
@@ -685,38 +593,21 @@ void runBGParent(pid_t spawnpid, struct commandElements* curCommand)
     printf("background pid is %d\n", spawnpid);
     fflush(stdout);
 
+    // Run in the background and do not wait for child process to finish
     spawnpid = waitpid(spawnpid, &childExitStatus, WNOHANG);
-
-    // printf("Parent's waiting is done as the child with pid %d exited\n", spawnpid);
-    // fflush(stdout);
-    
-    // if(WIFEXITED(childExitStatus))
-    // {
-    //     printf("background pid %d is done: exit value %d\n", spawnpid, WEXITSTATUS(childExitStatus));
-    //     fflush(stdout);
-    // }
-    // else
-    // {
-    //     printf("background pid %d is done: terminated by signal %d\n", spawnpid, WTERMSIG(childExitStatus));
-    //     fflush(stdout);
-    // }
-
-    // // take out of PID list
-    // removeFromPIDList(spawnpid);
 }
 
 /*
-*
+*   Run background child process
 */
 void runBGChild(struct commandElements* curCommand)
 {
+    // Change SIGTSTP to ignore
     SIGTSTP_action.sa_handler = SIG_IGN;
     sigaction(SIGTSTP, &SIGTSTP_action, NULL); 
 
-    // Add to fgProcessIDs array
     pid_t childpid;
     int error;
-    // int childExitStatus;
     char status[256];
 
     // Check if i/o redirect
@@ -738,41 +629,16 @@ void runBGChild(struct commandElements* curCommand)
         outputRedirect(curCommand, false);
     }
 
-    // Print process id of background process when it begins
-    // childpid = getpid();
-    
-    // fflush(stdout);
-
     // Child will use a function from the exec() family of functions
     // to run the command
     error = execvp(curCommand->commands[0], curCommand->commands);
-    // perror("execvp bg");
-    // fflush(stderr);
 
-    // If there is an error, then kill child
+    // If there is an error, print error
     if(error == -1)
     {
         printf("BG Child %d error %d\n", childpid, errno);
-        // printf("Child %d exited abnormally %s\n", childpid, exitStatus);
         fflush(stdout); 
-
-        // Terminate this child
-        // kill(childpid, errno); 
     }
-    // Remove from fgProcessIDs array
-    // removeFromFGList(childpid);
-    // exit(2);
-
-    // Shell should use PATH variable to look for non-built in
-    // commands
-    // Shell should allow shell scripts to be executed
-
-    // If a command fails because the shell could not find the
-    // command to run, then the shell will print an error message and
-    // set the exit status to 1
-
-    // A child process must terminate after running a command (whether
-    // the command is successful or it fails)
 }
 
 /*
@@ -793,12 +659,10 @@ void runBGProcess(struct commandElements* curCommand)
 {
     pid_t spawnpid = -5;
 
+    // Fork background child
     spawnpid = fork();
 
-    // printf("runBGProcess bg spawnpid is: %d\n", spawnpid);
-    // fflush(stdout);
-
-    // Add to running list
+    // Add child to running list
     if(spawnpid != 0)
     {
         addToPIDList(spawnpid);
@@ -809,14 +673,12 @@ void runBGProcess(struct commandElements* curCommand)
         case -1:
             perror("fork() failed!");
             fflush(stderr);
-            // exit(1);
             break;
         case 0:     // Child execution
             runBGChild(curCommand);
             break;
         default:    // Parent execution
             runBGParent(spawnpid, curCommand);
-            // exit(0);
             break;
     }
 }
@@ -830,8 +692,6 @@ void runBGProcess(struct commandElements* curCommand)
 */
 void runOtherCommands(struct commandElements* curCommand)
 {
-    // When non-built in command is received, fork off a child
-    
     // First, determine if foreground/background command
     // If foreground
     if(curCommand->fg == true)
@@ -840,28 +700,12 @@ void runOtherCommands(struct commandElements* curCommand)
     }
     else
     {
-        // printf("Background: true\n");
-        // fflush(stdout);
         runBGProcess(curCommand);
     }
-
-    // Child will use a function from the exec() family of functions
-    // to run the command
-
-    // Shell should use PATH variable to look for non-built in
-    // commands
-    // Shell should allow shell scripts to be executed
-
-    // If a command fails because the shell could not find the
-    // command to run, then the shell will print an error message and
-    // set the exit status to 1
-
-    // A child process must terminate after running a command (whether
-    // the command is successful or it fails)
 }
 
 /*
-*
+*   Runs all commands whether they are built in or not.
 */
 bool runCommands(struct commandElements* curCommand)
 {
@@ -869,68 +713,62 @@ bool runCommands(struct commandElements* curCommand)
     int i, j;
     int numBuiltIns = 3;
     int builtInNum = -1;
-    int lastFgStatus = 0; /* REVISIT THIS */ // Exit status or terminating
-    int lastFgSignal = 2; /* REVISIT THIS */ // signal of the last foreground process ran by shell
+    int lastFgStatus = 0; 
+    int lastFgSignal = 2; 
     char* builtInCommands[numBuiltIns];
     char* pathDir = calloc(256, sizeof(char));
-    // char* changeDirectory[MAX_COMMAND_LINE_LENGTH];
     
     builtInCommands[0] = "exit";
     builtInCommands[1] = "cd";
     builtInCommands[2] = "status";
 
-    // // Go through and process all commands
-    // for(i = 0; i < curCommand->numArguments; i++)
-    // {
-        // Check for built in commands 'exit', 'cd', and 'status'
-        for(j = 0; j < numBuiltIns; j++)
+    // Check for built in commands 'exit', 'cd', and 'status'
+    for(j = 0; j < numBuiltIns; j++)
+    {
+        // If command found
+        if(strcmp(curCommand->commands[0], builtInCommands[j]) == 0)
         {
-            // if(strcmp(curCommand->commands[i], builtInCommands[j]) == 0)
-            if(strcmp(curCommand->commands[0], builtInCommands[j]) == 0)
-            {
-                builtInNum = j + 1;
-                break;
-            }
+            builtInNum = j + 1;
+            break;
         }
+    }
 
-        switch(builtInNum)
-        {
-            case 1: // exit command
-                curCommand->fg = true;
-                curCommand->bg = false;
-                runExitCommand();
-                isExiting = true;
-                return isExiting;   // return immediately to exit
-                break;
-            case 2: // cd command
-                curCommand->fg = true;
-                curCommand->bg = false;
-                // If no argument after cd
-                runCdCommand(curCommand); // Change index if needed
-                // i = runCdCommand(curCommand, i); // Change index if needed
-                break;
-            case 3: // status command
-                curCommand->fg = true;
-                curCommand->bg = false;
-                // Prints out either the exit status or the
-                // terminating signal of the last foreground process
-                // ran by the shell
-                printf("%s\n", exitStatus);
-                fflush(stdout);
-                break;
-            default: // none built in
-                // printf("Non built in command\n");
-                // fflush(stdout);
-                // runOtherCommands(curCommand, i);
-                runOtherCommands(curCommand);
-                break;
-        }
-    // }
+    // Determine which command to run
+    switch(builtInNum)
+    {
+        case 1: // exit command
+            curCommand->fg = true;
+            curCommand->bg = false;
+            runExitCommand();
+            isExiting = true;
+            return isExiting;   // return immediately to exit
+            break;
+        case 2: // cd command
+            curCommand->fg = true;
+            curCommand->bg = false;
+            // If no argument after cd
+            runCdCommand(curCommand); // Change index if needed
+            // i = runCdCommand(curCommand, i); // Change index if needed
+            break;
+        case 3: // status command
+            curCommand->fg = true;
+            curCommand->bg = false;
+            // Prints out either the exit status or the
+            // terminating signal of the last foreground process
+            // ran by the shell
+            printf("%s\n", exitStatus);
+            fflush(stdout);
+            break;
+        default: // none built in
+            runOtherCommands(curCommand);
+            break;
+    }
+
     return isExiting;
 }
 
 /*
-*
+*   Initialize process ID list
 */
 void initializePIDList()
 {
@@ -943,7 +781,7 @@ void initializePIDList()
 }
 
 /*
-*
+*   Initialize first exitStatus
 */
 void initializeExitStatus()
 {
@@ -951,7 +789,7 @@ void initializeExitStatus()
 }
 
 /*
-*   Fill out SIGINT_action struct. Register handle_SIGINT as the
+*   Fill out SIGINT_action struct. Register SIG_IGN as the
 *   signal handler.
 */
 void initializeSIGINT()
@@ -976,16 +814,13 @@ void initializeSIGTSTP()
 }
 
 /*
-*
+*   Check all background processes and see which are running or not.
 */
 void checkBGProcesses()
 {
     int i;
     int childExitStatus;
     pid_t spawnpid = 0;
-
-    // printf("Checking BG processes\n");
-    // fflush(stdout);
 
     for(i = 0; i < MAX_COMMAND_LINE_ARGUMENTS; i++)
     {
@@ -1040,9 +875,10 @@ int main()
     initializeSIGINT();
     initializeSIGTSTP();
 
-    // Create linked list of commands
     printf("\n");
-    fflush(stdout); /* FLUSH AFTER EVERY PRINT! */
+    fflush(stdout); 
+
+    // Loop through shell
     do
     {
         curCommand = getCommandLine();
@@ -1050,8 +886,6 @@ int main()
         // Check if curCommand should not be ignored and commands ran
         if(!curCommand->ignore)
         {
-            // printCommandElements(curCommand); // For testing only
-
             isExiting = runCommands(curCommand);
         }
 
