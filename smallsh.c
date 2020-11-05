@@ -203,10 +203,15 @@ struct commandElements* getCommandLine()
     commandLine[strcspn(commandLine, "\n")] = 0;
 
     char* tempLine = calloc(MAX_COMMAND_LINE_LENGTH, sizeof(char));
-    strcpy(tempLine, commandLine);
-
-    strcpy(commandLine, replaceString(tempLine));
     
+    if(commandLine[0] != 0)
+    {
+        strcpy(tempLine, commandLine);
+        strcpy(commandLine, replaceString(tempLine));
+    }
+    
+    free(tempLine);
+
     // Parse command line into struct
     return parseCommandLine(commandLine);
 } 
