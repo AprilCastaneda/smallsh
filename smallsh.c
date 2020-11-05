@@ -433,7 +433,10 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 {
     int childExitStatus;
     char status[256];
+    
     SIGINT_action.sa_handler = SIG_IGN;
+    sigaction(SIGINT, &SIGINT_action, NULL);
+
     spawnpid = waitpid(spawnpid, &childExitStatus, 0);
 
     
@@ -442,7 +445,7 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
     
     if(WIFEXITED(childExitStatus))
     {
-        
+        SIGINT_action.sa_handler = SIG_IGN;
         sigaction(SIGINT, &SIGINT_action, NULL);
         // Change exit status to string
         sprintf(status, "%d", WEXITSTATUS(childExitStatus));
@@ -457,8 +460,9 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
     }
     else
     {
-        // SIGINT_action.sa_handler = SIG_IGN;
+        SIGINT_action.sa_handler = SIG_IGN;
         sigaction(SIGINT, &SIGINT_action, NULL);
+
         // Change termination signal to string
         sprintf(status, "%d", WTERMSIG(childExitStatus));
         // sprintf(status, "%d", errno);
@@ -468,8 +472,11 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
         strcpy(exitStatus, "terminated by signal ");
         strcat(exitStatus, status);
 
-        // printf("Child %d exited abnormally %s\n", spawnpid, exitStatus);
-        // fflush(stdout);
+        if(WTERMSIG(childExitStatus) == 2)
+        {
+            printf("%s\n", exitStatus);
+            fflush(stdout);
+        }
     }
 }
 
@@ -625,7 +632,10 @@ void runFGChild(struct commandElements* curCommand)
     // Child will use a function from the exec() family of functions
     // to run the command
     error = execvp(curCommand->commands[0], curCommand->commands);
-    perror("curCommand->commands[0]: ");
+    printf("%s: ", curCommand->commands[0]);
+    fflush(stdout);
+    perror("");
+    fflush(stderr);
 
     // If there is an error, then kill child
     if(error == -1)
