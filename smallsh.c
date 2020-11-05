@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #define MAX_COMMAND_LINE_LENGTH 2049 // 2048 characters plus null at the end
 #define MAX_COMMAND_LINE_ARGUMENTS 512
@@ -398,15 +399,72 @@ void runFGChild(struct commandElements* curCommand)
     // Add to fgProcessIDs array
     pid_t childpid;
     int error;
-    // int childExitStatus;
+    int result;
     char status[256];
     
     childpid = getpid();
     // addToFGList(childpid);
+
+    // Check if i/o redirect
+    if(curCommand->inputRedirect == true) 
+    {
+        printf("in input redirect\n");
+        fflush(stdout);
+        
+        int sourceFD;
+        sourceFD = open(curCommand->inputFile, O_RDONLY);
+        
+        if(sourceFD == -1)
+        {
+            printf("cannot open %s for input\n", curCommand->inputFile);
+            fflush(stdout);
+            exit(1);
+        }
+        
+        // printf("The file descriptor for sourceFD is %d\n", sourceFD);
+        // fflush(stdout);
+        
+        result = dup2(sourceFD, 0);
+        
+        if(result == -1)
+        {
+            perror("source dup2() fail\n");
+            fflush(stderr);
+            exit(2);
+        }
+    }
+    if(curCommand->outputRedirect == true)
+    {
+        printf("in output redirect\n");
+        fflush(stdout);
+        
+        int targetFD;
+        targetFD = open(curCommand->outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+        if(targetFD == -1)
+        {
+            printf("cannot open %s for output\n", curCommand->outputFile);
+            fflush(stdout);
+            exit(1);
+        }
+
+        // printf("The file descriptor for targetFD is %d\n", targetFD);
+        // fflush(stdout);
+        
+        result = dup2(targetFD, 0);
+        
+        if(result == -1)
+        {
+            perror("target dup2() fail\n");
+            fflush(stderr);
+            exit(2);
+        }
+    }
+
     // Child will use a function from the exec() family of functions
     // to run the command
     error = execvp(curCommand->commands[0], curCommand->commands);
-    // perror("execvp");
+    perror("execvp");
 
     // If there is an error, then kill child
     if(error == -1)
