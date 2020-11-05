@@ -437,12 +437,77 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 /*
 *
 */
+void inputRedirect(struct commandElements* curCommand)
+{
+    int result;
+    
+    printf("in input redirect file: %s\n", curCommand->inputFile);
+    fflush(stdout);
+    
+    int sourceFD;
+    sourceFD = open(curCommand->inputFile, O_RDONLY);
+    
+    if(sourceFD == -1)
+    {
+        printf("cannot open %s for input\n", curCommand->inputFile);
+        fflush(stdout);
+        exit(1);
+    }
+    
+    // printf("The file descriptor for sourceFD is %d\n", sourceFD);
+    // fflush(stdout);
+    
+    result = dup2(sourceFD, 0);
+    
+    if(result == -1)
+    {
+        perror("source dup2() fail\n");
+        fflush(stderr);
+        exit(2);
+    }
+}
+
+/*
+*
+*/
+void outputRedirect(struct commandElements* curCommand)
+{
+    int result;
+
+    printf("in output redirect file: %s\n", curCommand->outputFile);
+    fflush(stdout);
+    
+    int targetFD;
+    targetFD = open(curCommand->outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    if(targetFD == -1)
+    {
+        printf("cannot open %s for output\n", curCommand->outputFile);
+        fflush(stdout);
+        exit(1);
+    }
+
+    // printf("The file descriptor for targetFD is %d\n", targetFD);
+    // fflush(stdout);
+    
+    result = dup2(targetFD, 1);
+    
+    if(result == -1)
+    {
+        perror("target dup2() fail\n");
+        fflush(stderr);
+        exit(2);
+    }
+}
+
+/*
+*
+*/
 void runFGChild(struct commandElements* curCommand)
 {
     // Add to fgProcessIDs array
     pid_t childpid;
     int error;
-    int result;
     char status[256];
     
     childpid = getpid();
@@ -451,57 +516,11 @@ void runFGChild(struct commandElements* curCommand)
     // Check if i/o redirect
     if(curCommand->inputRedirect == true) 
     {
-        printf("in input redirect file: %s\n", curCommand->inputFile);
-        fflush(stdout);
-        
-        int sourceFD;
-        sourceFD = open(curCommand->inputFile, O_RDONLY);
-        
-        if(sourceFD == -1)
-        {
-            printf("cannot open %s for input\n", curCommand->inputFile);
-            fflush(stdout);
-            exit(1);
-        }
-        
-        // printf("The file descriptor for sourceFD is %d\n", sourceFD);
-        // fflush(stdout);
-        
-        result = dup2(sourceFD, 0);
-        
-        if(result == -1)
-        {
-            perror("source dup2() fail\n");
-            fflush(stderr);
-            exit(2);
-        }
+        inputRedirect(curCommand);
     }
     if(curCommand->outputRedirect == true)
     {
-        printf("in output redirect file: %s\n", curCommand->outputFile);
-        fflush(stdout);
-        
-        int targetFD;
-        targetFD = open(curCommand->outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-        if(targetFD == -1)
-        {
-            printf("cannot open %s for output\n", curCommand->outputFile);
-            fflush(stdout);
-            exit(1);
-        }
-
-        // printf("The file descriptor for targetFD is %d\n", targetFD);
-        // fflush(stdout);
-        
-        result = dup2(targetFD, 1);
-        
-        if(result == -1)
-        {
-            perror("target dup2() fail\n");
-            fflush(stderr);
-            exit(2);
-        }
+        outputRedirect(curCommand);
     }
 
     // Child will use a function from the exec() family of functions
@@ -519,20 +538,6 @@ void runFGChild(struct commandElements* curCommand)
         // Terminate this child
         kill(childpid, errno); 
     }
-    // Remove from fgProcessIDs array
-    // removeFromFGList(childpid);
-    // exit(2);
-
-    // Shell should use PATH variable to look for non-built in
-    // commands
-    // Shell should allow shell scripts to be executed
-
-    // If a command fails because the shell could not find the
-    // command to run, then the shell will print an error message and
-    // set the exit status to 1
-
-    // A child process must terminate after running a command (whether
-    // the command is successful or it fails)
 }
 
 /*
