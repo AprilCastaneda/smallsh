@@ -67,9 +67,6 @@ struct commandElements* parseCommandLine(char* commandLine)
 {
     struct commandElements *curCommand = malloc(sizeof(struct commandElements));
 
-    // Get index of newline char and overwrite it with 0
-    commandLine[strcspn(commandLine, "\n")] = 0;
-
     // printf("What you typed: %s\n", commandLine);
     // fflush(stdout);
 
@@ -140,6 +137,54 @@ struct commandElements* parseCommandLine(char* commandLine)
 }
 
 /*
+*
+*/
+char* replaceString(char* commandLineCopy)
+{
+    // For use with strtok_r
+    char* saveptr;
+    char* tempLine = calloc(MAX_COMMAND_LINE_LENGTH, sizeof(char));
+    char spid[256];
+    int origLen = strlen(commandLineCopy);
+
+    // Change shell pid to string
+    sprintf(spid, "%d", getpid());
+
+    // The first token is the title
+    char* token = strtok_r(commandLineCopy, "$$", &saveptr);
+    
+    // printf("Token 1: %s\n", token);
+    // fflush(stdout);
+
+    if(strlen(token) != origLen)
+    {
+        // The next token is the year
+        while(token != NULL)
+        {
+            strcpy(tempLine, token);
+            strcat(tempLine, spid);
+            // printf("Current templine: %s\n", tempLine);
+            // fflush(stdout);
+            token = strtok_r(NULL, "$$", &saveptr);
+            // if(token != NULL)
+            // {
+            //     printf("Next token: %s\n", token);
+            //     fflush(stdout);
+            // }
+        }
+
+        // printf("test templine: %s\n", tempLine);
+        // fflush(stdout);
+
+        return tempLine;
+    }
+    else
+    {
+        return commandLineCopy;
+    }    
+}
+
+/*
 *   Get command line elements and parse elements into commandElements
 *   struct.
 */
@@ -154,21 +199,14 @@ struct commandElements* getCommandLine()
     // Get command line until a newline is read
     fgets(commandLine, MAX_COMMAND_LINE_LENGTH, stdin);
 
-    // Get pointer to first occurence of "$$" in commandLine
-    // Reference: http://www.cplusplus.com/reference/cstring/strstr/
-    char* chPtr = strstr(commandLine, "$$");
-    char sPid[256]; // buffer to store int pid transformed to string
+    // Get index of newline char and overwrite it with 0
+    commandLine[strcspn(commandLine, "\n")] = 0;
 
-    // Go through commandLine and expand any instance of "$$" in a
-    // command into the processID of smallsh itself
-    // Also, transform processID into string
-    while(chPtr != NULL)
-    {
-        sprintf(sPid, "%d", getpid());
-        strncpy(chPtr, sPid, strlen("$$"));
-        chPtr = strstr(commandLine, "$$");
-    }
+    char* tempLine = calloc(MAX_COMMAND_LINE_LENGTH, sizeof(char));
+    strcpy(tempLine, commandLine);
 
+    strcpy(commandLine, replaceString(tempLine));
+    
     // Parse command line into struct
     return parseCommandLine(commandLine);
 } 
