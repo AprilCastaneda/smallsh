@@ -437,66 +437,120 @@ void runFGParent(pid_t spawnpid, struct commandElements* curCommand)
 /*
 *
 */
-void inputRedirect(struct commandElements* curCommand)
+void inputRedirect(struct commandElements* curCommand, bool redir)
 {
     int result;
-    
-    printf("in input redirect file: %s\n", curCommand->inputFile);
-    fflush(stdout);
-    
-    int sourceFD;
-    sourceFD = open(curCommand->inputFile, O_RDONLY);
-    
-    if(sourceFD == -1)
-    {
-        printf("cannot open %s for input\n", curCommand->inputFile);
-        fflush(stdout);
-        exit(1);
-    }
-    
-    // printf("The file descriptor for sourceFD is %d\n", sourceFD);
+
+    // printf("in input redirect file: %s\n", curCommand->inputFile);
     // fflush(stdout);
     
-    result = dup2(sourceFD, 0);
+    int sourceFD;
     
-    if(result == -1)
+    if(redir)
     {
-        perror("source dup2() fail\n");
-        fflush(stderr);
-        exit(2);
+        sourceFD = open(curCommand->inputFile, O_RDONLY);
+    
+        if(sourceFD == -1)
+        {
+            printf("cannot open %s for input\n", curCommand->inputFile);
+            fflush(stdout);
+            exit(1);
+        }
+        
+        // printf("The file descriptor for sourceFD is %d\n", sourceFD);
+        // fflush(stdout);
+        
+        result = dup2(sourceFD, 0);
+        
+        if(result == -1)
+        {
+            perror("source dup2() fail\n");
+            fflush(stderr);
+            exit(2);
+        }
+    }
+    else
+    {
+        sourceFD = open("/dev/null", O_RDONLY);
+    
+        if(sourceFD == -1)
+        {
+            printf("cannot open %s for input\n", curCommand->inputFile);
+            fflush(stdout);
+            exit(1);
+        }
+        
+        // printf("The file descriptor for sourceFD is %d\n", sourceFD);
+        // fflush(stdout);
+        
+        result = dup2(sourceFD, 0);
+        
+        if(result == -1)
+        {
+            perror("source dup2() fail\n");
+            fflush(stderr);
+            exit(2);
+        }
     }
 }
 
 /*
 *
 */
-void outputRedirect(struct commandElements* curCommand)
+void outputRedirect(struct commandElements* curCommand, bool redir)
 {
     int result;
 
-    printf("in output redirect file: %s\n", curCommand->outputFile);
-    fflush(stdout);
-    
-    int targetFD;
-    targetFD = open(curCommand->outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-    if(targetFD == -1)
-    {
-        printf("cannot open %s for output\n", curCommand->outputFile);
-        fflush(stdout);
-        exit(1);
-    }
-
-    // printf("The file descriptor for targetFD is %d\n", targetFD);
+    // printf("in output redirect file: %s\n", curCommand->outputFile);
     // fflush(stdout);
     
-    result = dup2(targetFD, 1);
-    
-    if(result == -1)
+    int targetFD;
+
+    if(redir)
     {
-        perror("target dup2() fail\n");
-        fflush(stderr);
-        exit(2);
+        targetFD = open(curCommand->outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+        if(targetFD == -1)
+        {
+            printf("cannot open %s for output\n", curCommand->outputFile);
+            fflush(stdout);
+            exit(1);
+        }
+
+        // printf("The file descriptor for targetFD is %d\n", targetFD);
+        // fflush(stdout);
+        
+        result = dup2(targetFD, 1);
+        
+        if(result == -1)
+        {
+            perror("target dup2() fail\n");
+            fflush(stderr);
+            exit(2);
+        }
+    }
+    else
+    {
+        targetFD = open("/dev/null", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+        if(targetFD == -1)
+        {
+            printf("cannot open %s for output\n", curCommand->outputFile);
+            fflush(stdout);
+            exit(1);
+        }
+
+        // printf("The file descriptor for targetFD is %d\n", targetFD);
+        // fflush(stdout);
+        
+        result = dup2(targetFD, 1);
+        
+        if(result == -1)
+        {
+            perror("target dup2() fail\n");
+            fflush(stderr);
+            exit(2);
+        }
     }
 }
 
@@ -516,11 +570,11 @@ void runFGChild(struct commandElements* curCommand)
     // Check if i/o redirect
     if(curCommand->inputRedirect == true) 
     {
-        inputRedirect(curCommand);
+        inputRedirect(curCommand, true);
     }
     if(curCommand->outputRedirect == true)
     {
-        outputRedirect(curCommand);
+        outputRedirect(curCommand, true);
     }
 
     // Child will use a function from the exec() family of functions
@@ -606,7 +660,26 @@ void runBGChild(struct commandElements* curCommand)
     int error;
     // int childExitStatus;
     char status[256];
-    
+
+    // Check if i/o redirect
+    if(curCommand->inputRedirect == true) 
+    {
+        inputRedirect(curCommand, true);
+    }
+    else
+    {
+        inputRedirect(curCommand, false);
+    }
+
+    if(curCommand->outputRedirect == true)
+    {
+        outputRedirect(curCommand, true);
+    }
+    else
+    {
+        outputRedirect(curCommand, false);
+    }
+
     // Print process id of background process when it begins
     // childpid = getpid();
     
